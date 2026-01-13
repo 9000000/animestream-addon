@@ -360,15 +360,6 @@ function getManifest(filterOptions, showCounts = true) {
         ]
       },
       {
-        id: 'anime-search',
-        type: 'anime',
-        name: 'Search Anime',
-        extra: [
-          { name: 'search', isRequired: true },
-          { name: 'skip' }
-        ]
-      },
-      {
         id: 'anime-series-search',
         type: 'series',
         name: 'Anime Series',
