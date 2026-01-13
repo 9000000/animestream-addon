@@ -1,0 +1,11 @@
+name = "allanime-scraper"
+main = "scraper.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+# Optional: Add custom domain
+# routes = [
+#   { pattern = "allanime-scraper.yourdomain.com", custom_domain = true }
+# ]

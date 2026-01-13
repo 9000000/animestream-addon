@@ -7,6 +7,7 @@
 
 const catalogHandler = require('./handlers/catalog');
 const metaHandler = require('./handlers/meta');
+const streamHandler = require('./handlers/stream');
 const { getManifest } = require('./manifest');
 const logger = require('../utils/logger');
 
@@ -51,10 +52,23 @@ async function handleMeta(args) {
   }
 }
 
+/**
+ * Stream handler wrapper with error handling
+ */
+async function handleStream(args) {
+  try {
+    return await streamHandler(args);
+  } catch (error) {
+    logger.error('Stream handler error:', error);
+    return { streams: [] };
+  }
+}
+
 logger.info('Addon handlers initialized');
 
 module.exports = {
   catalogHandler: handleCatalog,
   metaHandler: handleMeta,
+  streamHandler: handleStream,
   getManifest: getManifestWithConfig
 };

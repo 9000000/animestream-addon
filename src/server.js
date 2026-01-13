@@ -12,7 +12,7 @@ const logger = require('./utils/logger');
 const databaseLoader = require('./utils/databaseLoader');
 
 // Import handlers
-const { catalogHandler, metaHandler, getManifest } = require('./addon');
+const { catalogHandler, metaHandler, streamHandler, getManifest } = require('./addon');
 
 /**
  * Initialize the database on startup
@@ -224,6 +224,31 @@ app.get('/meta/:type/:id.json', async (req, res) => {
   } catch (error) {
     logger.error('Meta error:', error);
     res.json({ meta: null });
+  }
+});
+
+// === Config-based Stream Route ===
+app.get('/:config/stream/:type/:id.json', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const result = await streamHandler({ type, id });
+    res.json(result);
+  } catch (error) {
+    logger.error('Stream error:', error);
+    res.json({ streams: [] });
+  }
+});
+
+// === Stream Route ===
+// Pattern: /stream/:type/:id.json
+app.get('/stream/:type/:id.json', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const result = await streamHandler({ type, id });
+    res.json(result);
+  } catch (error) {
+    logger.error('Stream error:', error);
+    res.json({ streams: [] });
   }
 });
 

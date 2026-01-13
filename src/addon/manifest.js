@@ -246,17 +246,17 @@ function getManifest(userConfig = {}) {
   
   return {
     id: 'community.animestream',
-    version: '1.1.0',  // Bumped version to force manifest refresh
+    version: '1.2.0',  // Bumped version for streaming capability
     name: 'AnimeStream',
-    description: 'Comprehensive anime catalog with 7,000+ titles. Features Top Rated, Season Releases, Currently Airing, and Movies catalogs with genre filtering.',
+    description: 'Comprehensive anime catalog with 7,000+ titles and streaming from AllAnime. Features Top Rated, Season Releases, Currently Airing, and Movies catalogs with genre filtering.',
     
-    // Resources we provide - ONLY catalog, let Cinemeta handle meta for better covers/data
-    resources: ['catalog'],
+    // Resources we provide - catalog + stream from AllAnime
+    resources: ['catalog', 'stream'],
     
     // Types we handle - anime (custom) + series + movie for proper Stremio display
     types: ['anime', 'series', 'movie'],
     
-    // ID prefixes we respond to - for catalog search only
+    // ID prefixes we respond to
     idPrefixes: ['tt'],
     
     // Catalogs with custom 'anime' type
