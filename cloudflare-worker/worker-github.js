@@ -134,9 +134,11 @@ function formatAnimeMeta(anime) {
     formatted.description = anime.description.substring(0, 200) + '...';
   }
   
-  // Remove poster so Stremio uses Cinemeta's higher quality posters
-  // Cinemeta will fetch the poster based on the IMDB ID (tt...)
-  delete formatted.poster;
+  // Use Cinemeta poster URLs for higher quality posters
+  // Format: https://images.metahub.space/poster/medium/{imdb_id}/img
+  if (anime.id && anime.id.startsWith('tt')) {
+    formatted.poster = `https://images.metahub.space/poster/medium/${anime.id}/img`;
+  }
   
   return formatted;
 }
