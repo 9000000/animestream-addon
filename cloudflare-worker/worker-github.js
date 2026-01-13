@@ -360,6 +360,15 @@ function getManifest(filterOptions, showCounts = true) {
         ]
       },
       {
+        id: 'anime-search',
+        type: 'anime',
+        name: 'Search Anime',
+        extra: [
+          { name: 'search', isRequired: true },
+          { name: 'skip' }
+        ]
+      },
+      {
         id: 'anime-series-search',
         type: 'series',
         name: 'Anime Series',
@@ -476,13 +485,18 @@ export default {
         }
       }
       
-      // Handle search
-      if (id === 'anime-series-search' || id === 'anime-movies-search') {
+      // Handle search catalogs
+      if (id === 'anime-search' || id === 'anime-series-search' || id === 'anime-movies-search') {
         if (!extra.search) {
           return new Response(JSON.stringify({ metas: [] }), { headers: JSON_HEADERS });
         }
         
-        const targetType = id === 'anime-movies-search' ? 'movie' : 'series';
+        // Determine target type based on catalog id
+        let targetType = null;
+        if (id === 'anime-movies-search') targetType = 'movie';
+        else if (id === 'anime-series-search') targetType = 'series';
+        // anime-search searches all types
+        
         const results = searchDatabase(catalog, extra.search, targetType);
         
         const skip = parseInt(extra.skip) || 0;
