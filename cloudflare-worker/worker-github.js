@@ -529,12 +529,16 @@ function handleAiring(catalogData, genreFilter, config) {
   );
   
   // Apply exclude long-running filter
+  // This hides shows like One Piece, Naruto, Doraemon that have 100s of episodes
+  // Shows with < 100 episodes are never considered "long-running"
   if (config.excludeLongRunning) {
     const currentYear = new Date().getFullYear();
     filtered = filtered.filter(anime => {
       const year = anime.year || currentYear;
       const episodeCount = anime.episodes || 0;
-      return year >= currentYear - 5 && episodeCount < 200;
+      // Allow if: started in last 10 years AND has < 200 episodes
+      // OR if it has < 100 episodes (definitely not long-running)
+      return (year >= currentYear - 10 && episodeCount < 200) || episodeCount < 100;
     });
   }
   
