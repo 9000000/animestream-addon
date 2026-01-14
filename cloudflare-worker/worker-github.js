@@ -23,10 +23,286 @@ const JSON_HEADERS = {
 
 const PAGE_SIZE = 100;
 
+// AllAnime API endpoint (direct integration, no separate worker)
+const ALLANIME_API = 'https://api.allanime.day/api';
+const ALLANIME_BASE = 'https://allanime.to';
+
 // ===== DATA CACHE (in-memory per worker instance) =====
 let catalogCache = null;
 let filterOptionsCache = null;
 let cacheTimestamp = 0;
+
+// ===== ALLANIME API HELPERS =====
+
+// Build headers that mimic a real browser for AllAnime API
+function buildBrowserHeaders(referer = null) {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': ALLANIME_BASE,
+    'Referer': referer || ALLANIME_BASE,
+  };
+}
+
+/**
+ * Decode AllAnime's XOR-encrypted URLs
+ * They use hex encoding with XOR key 56 (0x38)
+ */
+function decryptSourceUrl(input) {
+  if (!input) return null;
+  if (input.startsWith('http')) return normalizeUrl(input);
+  
+  const str = input.startsWith('--') ? input.slice(2) : input;
+  if (!/^[0-9a-fA-F]+$/.test(str)) return input;
+  
+  let result = '';
+  for (let i = 0; i < str.length; i += 2) {
+    const num = parseInt(str.substr(i, 2), 16);
+    result += String.fromCharCode(num ^ 56);
+  }
+  
+  if (result.startsWith('/api')) return null;
+  return normalizeUrl(result);
+}
+
+// Fix double slashes and normalize URLs
+function normalizeUrl(url) {
+  if (!url) return url;
+  // Fix double slashes after domain (but not after protocol)
+  return url.replace(/([^:]\/)\/+/g, '$1');
+}
+
+// Extract quality from source name or URL
+function detectQuality(sourceName, url) {
+  const text = `${sourceName} ${url}`.toLowerCase();
+  if (/2160p|4k|uhd/i.test(text)) return '4K';
+  if (/1080p|fhd|fullhd/i.test(text)) return '1080p';
+  if (/720p|hd/i.test(text)) return '720p';
+  if (/480p|sd/i.test(text)) return '480p';
+  return 'HD';
+}
+
+// Strip HTML tags from text
+function stripHtml(html) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+// Check if URL is a direct video stream
+function isDirectStream(url) {
+  if (/\.(mp4|m3u8|mkv|webm)(\?|$)/i.test(url)) return true;
+  if (/fast4speed\.rsvp/i.test(url)) return true;
+  return false;
+}
+
+/**
+ * Search AllAnime for shows matching a query
+ */
+async function searchAllAnime(searchQuery, limit = 10) {
+  const query = `
+    query ($search: SearchInput!, $limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
+      shows(search: $search, limit: $limit, page: $page, translationType: $translationType, countryOrigin: $countryOrigin) {
+        edges { _id name englishName nativeName type score status episodeCount }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(ALLANIME_API, {
+      method: 'POST',
+      headers: { ...buildBrowserHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        variables: {
+          search: { query: searchQuery, allowAdult: false, allowUnknown: false },
+          limit,
+          page: 1,
+          translationType: 'sub',
+          countryOrigin: 'JP',
+        },
+      }),
+    });
+
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    const shows = data?.data?.shows?.edges || [];
+    
+    return shows.map(show => ({
+      id: show._id,
+      title: show.englishName || show.name,
+      nativeTitle: show.nativeName,
+      type: show.type,
+      score: show.score,
+    }));
+  } catch (e) {
+    console.error('AllAnime search error:', e.message);
+    return [];
+  }
+}
+
+/**
+ * Get episode sources from AllAnime
+ */
+async function getEpisodeSources(showId, episode) {
+  const query = `
+    query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
+      episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) {
+        episodeString
+        sourceUrls
+      }
+    }
+  `;
+
+  const streams = [];
+
+  for (const translationType of ['sub', 'dub']) {
+    try {
+      const response = await fetch(ALLANIME_API, {
+        method: 'POST',
+        headers: { ...buildBrowserHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: { showId, translationType, episodeString: String(episode) },
+        }),
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const episodeData = data?.data?.episode;
+      if (!episodeData?.sourceUrls) continue;
+
+      for (const source of episodeData.sourceUrls) {
+        if (!source.sourceUrl) continue;
+
+        const decodedUrl = decryptSourceUrl(source.sourceUrl);
+        if (!decodedUrl || !decodedUrl.startsWith('http')) continue;
+        if (decodedUrl.includes('listeamed.net')) continue;
+
+        const isDirect = isDirectStream(decodedUrl);
+        
+        // Only include direct streams for now (Stremio can play these)
+        if (!isDirect) continue;
+
+        streams.push({
+          url: decodedUrl,
+          quality: detectQuality(source.sourceName, decodedUrl),
+          provider: source.sourceName || 'AllAnime',
+          type: translationType.toUpperCase(),
+          isDirect: true,
+          behaviorHints: decodedUrl.includes('fast4speed') ? {
+            notWebReady: true,
+            bingeGroup: `allanime-${showId}`,
+            proxyHeaders: { request: { 'Referer': 'https://allanime.to/' } }
+          } : undefined,
+        });
+      }
+    } catch (e) {
+      console.error(`Error fetching ${translationType}:`, e.message);
+    }
+  }
+
+  return streams;
+}
+
+// ===== ALLANIME SHOW DETAILS =====
+
+/**
+ * Get full show details from AllAnime including available episodes
+ */
+async function getAllAnimeShowDetails(showId) {
+  const query = `
+    query ($showId: String!) {
+      show(_id: $showId) {
+        _id
+        name
+        englishName
+        nativeName
+        description
+        type
+        status
+        score
+        episodeCount
+        thumbnail
+        banner
+        genres
+        studios
+        availableEpisodesDetail
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(ALLANIME_API, {
+      method: 'POST',
+      headers: { ...buildBrowserHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { showId } }),
+    });
+
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    return data?.data?.show || null;
+  } catch (e) {
+    console.error('AllAnime show details error:', e.message);
+    return null;
+  }
+}
+
+// ===== CINEMETA FALLBACK =====
+
+/**
+ * Fetch anime metadata from Cinemeta when not in our catalog
+ * This allows us to provide streams for anime that users find via other addons
+ * Returns full metadata including poster, description, etc.
+ */
+async function fetchCinemetaMeta(imdbId, type = 'series') {
+  try {
+    const cinemetaType = type === 'movie' ? 'movie' : 'series';
+    const response = await fetch(`https://v3-cinemeta.strem.io/meta/${cinemetaType}/${imdbId}.json`, {
+      headers: buildBrowserHeaders()
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data?.meta?.name) return null;
+    
+    const meta = data.meta;
+    
+    // Return full metadata that might be useful
+    return {
+      id: imdbId,
+      name: meta.name,
+      type: cinemetaType,
+      poster: meta.poster || null,
+      background: meta.background || null,
+      description: meta.description || null,
+      genres: meta.genres || [],
+      releaseInfo: meta.releaseInfo || null,
+      runtime: meta.runtime || null,
+      videos: meta.videos || [],
+      // Flag to indicate if metadata is incomplete
+      _hasPoster: !!meta.poster,
+      _hasDescription: !!meta.description && meta.description.length > 10,
+      _isComplete: !!meta.poster && !!meta.description && meta.description.length > 10
+    };
+  } catch (e) {
+    console.error('Cinemeta fetch error:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Check if metadata is poor/incomplete and needs enrichment
+ */
+function isMetadataIncomplete(meta) {
+  if (!meta) return true;
+  // Consider incomplete if missing poster or has very short/no description
+  return !meta.poster || !meta.description || meta.description.length < 20;
+}
 
 // ===== DATA FETCHING =====
 
@@ -105,6 +381,19 @@ function isSeriesType(anime) {
   return true;
 }
 
+// Filter out entries that are separate seasons of shows already covered by a main entry
+// These have IMDB IDs that cover all seasons, so we don't need separate catalog entries
+const HIDDEN_DUPLICATE_ENTRIES = new Set([
+  'mal-57658',    // JJK: The Culling Game Part 1 (covered by tt12343534 S3)
+  'tt36956670',   // JJK: Hidden Inventory/Premature Death (covered by tt12343534 S2)
+  'tt14331144',   // JJK 0 movie (keep as separate - this is a movie)
+  // Add more as needed
+]);
+
+function isHiddenDuplicate(anime) {
+  return HIDDEN_DUPLICATE_ENTRIES.has(anime.id);
+}
+
 function isMovieType(anime) {
   if (anime.subtype === 'movie') return true;
   let runtime = anime.runtime;
@@ -154,6 +443,7 @@ function searchDatabase(catalogData, query, targetType = null) {
   const scored = [];
   
   for (const anime of catalogData) {
+    if (isHiddenDuplicate(anime)) continue;
     if (targetType === 'series' && !isSeriesType(anime)) continue;
     if (targetType === 'movie' && !isMovieType(anime)) continue;
     
@@ -200,7 +490,7 @@ function searchDatabase(catalogData, query, targetType = null) {
 // ===== CATALOG HANDLERS =====
 
 function handleTopRated(catalogData, genreFilter, config) {
-  let filtered = catalogData.filter(isSeriesType);
+  let filtered = catalogData.filter(anime => isSeriesType(anime) && !isHiddenDuplicate(anime));
   
   if (genreFilter) {
     const genre = parseGenreFilter(genreFilter);
@@ -216,7 +506,7 @@ function handleTopRated(catalogData, genreFilter, config) {
 }
 
 function handleSeasonReleases(catalogData, seasonFilter) {
-  let filtered = catalogData.filter(isSeriesType);
+  let filtered = catalogData.filter(anime => isSeriesType(anime) && !isHiddenDuplicate(anime));
   
   if (seasonFilter) {
     const parsed = parseSeasonFilter(seasonFilter);
@@ -235,7 +525,7 @@ function handleSeasonReleases(catalogData, seasonFilter) {
 
 function handleAiring(catalogData, genreFilter, config) {
   let filtered = catalogData.filter(anime => 
-    anime.status === 'ONGOING' && isSeriesType(anime)
+    anime.status === 'ONGOING' && isSeriesType(anime) && !isHiddenDuplicate(anime)
   );
   
   // Apply exclude long-running filter
@@ -263,7 +553,7 @@ function handleAiring(catalogData, genreFilter, config) {
 }
 
 function handleMovies(catalogData, genreFilter) {
-  let filtered = catalogData.filter(isMovieType);
+  let filtered = catalogData.filter(anime => isMovieType(anime) && !isHiddenDuplicate(anime));
   
   if (genreFilter) {
     const cleanFilter = parseGenreFilter(genreFilter);
@@ -316,12 +606,26 @@ function getManifest(filterOptions, showCounts = true) {
 
   return {
     id: 'community.animestream',
-    version: '1.2.0',
+    version: '1.4.0',
     name: 'AnimeStream',
-    description: 'Comprehensive anime catalog with 7,000+ titles. Powered by GitHub.',
-    resources: ['catalog'],
+    description: 'Comprehensive anime catalog with 7,000+ titles. Streaming powered by AllAnime.',
+    // CRITICAL: Use explicit resource objects with types and idPrefixes
+    // for Stremio to properly route stream requests
+    resources: [
+      'catalog',
+      {
+        name: 'meta',
+        types: ['series', 'movie', 'anime'],
+        idPrefixes: ['tt', 'kitsu', 'mal']
+      },
+      {
+        name: 'stream',
+        types: ['series', 'movie', 'anime'],
+        idPrefixes: ['tt', 'kitsu', 'mal']
+      }
+    ],
     types: ['anime', 'series', 'movie'],
-    idPrefixes: ['tt'],
+    idPrefixes: ['tt', 'kitsu', 'mal'],
     catalogs: [
       {
         id: 'anime-top-rated',
@@ -408,6 +712,401 @@ function parseConfig(configStr) {
   return config;
 }
 
+// ===== STREAM HANDLING =====
+
+// Levenshtein distance for fuzzy matching
+function levenshteinDistance(str1, str2) {
+  const m = str1.length;
+  const n = str2.length;
+  
+  if (m === 0) return n;
+  if (n === 0) return m;
+  
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  
+  return dp[m][n];
+}
+
+function stringSimilarity(str1, str2) {
+  const maxLen = Math.max(str1.length, str2.length);
+  if (maxLen === 0) return 100;
+  const distance = levenshteinDistance(str1, str2);
+  return ((maxLen - distance) / maxLen) * 100;
+}
+
+// Find anime by any ID in catalog (supports IMDB tt*, MAL mal-*, Kitsu kitsu:*)
+function findAnimeById(catalog, id) {
+  // Try exact match on id field first
+  let anime = catalog.find(a => a.id === id);
+  if (anime) return anime;
+  
+  // For IMDB IDs, also check imdb_id field
+  if (id.startsWith('tt')) {
+    anime = catalog.find(a => a.imdb_id === id);
+    if (anime) return anime;
+  }
+  
+  // For MAL IDs (mal-12345), check mal_id field
+  if (id.startsWith('mal-')) {
+    const malId = id.replace('mal-', '');
+    anime = catalog.find(a => a.mal_id === malId || a.id === id);
+    if (anime) return anime;
+  }
+  
+  // For Kitsu IDs (kitsu:12345), check kitsu_id field  
+  if (id.startsWith('kitsu:')) {
+    const kitsuId = id.replace('kitsu:', '');
+    anime = catalog.find(a => a.kitsu_id === kitsuId || a.id === id);
+    if (anime) return anime;
+  }
+  
+  return null;
+}
+
+// Legacy function for backwards compatibility
+function findAnimeByImdbId(catalog, imdbId) {
+  return findAnimeById(catalog, imdbId);
+}
+
+// Search AllAnime for matching show (using direct API)
+async function findAllAnimeShow(title) {
+  if (!title) return null;
+  
+  try {
+    const results = await searchAllAnime(title, 10);
+    
+    if (!results || results.length === 0) return null;
+    
+    // Normalize titles for matching
+    const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Find best match using Levenshtein distance
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    for (const show of results) {
+      let score = 0;
+      const showName = (show.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const nativeTitle = (show.nativeTitle || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // Exact match
+      if (showName === normalizedTitle) {
+        score = 100;
+      } else if (showName.includes(normalizedTitle) || normalizedTitle.includes(showName)) {
+        score = 80;
+      } else {
+        // Fuzzy match
+        const similarity = Math.max(
+          stringSimilarity(normalizedTitle, showName),
+          stringSimilarity(normalizedTitle, nativeTitle)
+        );
+        score = similarity * 0.9;
+      }
+      
+      if (show.type === 'TV') score += 3;
+      if (show.type === 'Movie') score += 2;
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = show;
+      }
+    }
+    
+    if (bestMatch && bestScore >= 60) {
+      return bestMatch.id;
+    }
+    
+    return null;
+  } catch (e) {
+    console.error('Search error:', e);
+    return null;
+  }
+}
+
+// Season-aware search for AllAnime shows
+// Many anime have separate AllAnime entries per season (e.g., "Jujutsu Kaisen Season 2")
+async function findAllAnimeShowForSeason(title, season) {
+  if (!title) return null;
+  
+  // Known season name mappings for popular shows
+  // Maps: "base title" + season number -> AllAnime search terms
+  const seasonMappings = {
+    'jujutsu kaisen': {
+      1: ['Jujutsu Kaisen'],
+      2: ['Jujutsu Kaisen Season 2', 'Jujutsu Kaisen 2nd Season'],
+      3: ['Jujutsu Kaisen: The Culling Game', 'Jujutsu Kaisen Season 3', 'Jujutsu Kaisen Culling Game']
+    },
+    'attack on titan': {
+      1: ['Attack on Titan'],
+      2: ['Attack on Titan Season 2'],
+      3: ['Attack on Titan Season 3'],
+      4: ['Attack on Titan: The Final Season', 'Attack on Titan Final Season']
+    },
+    'my hero academia': {
+      1: ['My Hero Academia'],
+      2: ['My Hero Academia Season 2', 'My Hero Academia 2nd Season'],
+      3: ['My Hero Academia Season 3', 'My Hero Academia 3rd Season'],
+      4: ['My Hero Academia Season 4', 'My Hero Academia 4th Season'],
+      5: ['My Hero Academia Season 5', 'My Hero Academia 5th Season'],
+      6: ['My Hero Academia Season 6', 'My Hero Academia 6th Season'],
+      7: ['My Hero Academia Season 7', 'My Hero Academia 7th Season']
+    },
+    'demon slayer': {
+      1: ['Demon Slayer', 'Kimetsu no Yaiba'],
+      2: ['Demon Slayer: Entertainment District Arc', 'Demon Slayer Season 2'],
+      3: ['Demon Slayer: Swordsmith Village Arc', 'Demon Slayer Season 3'],
+      4: ['Demon Slayer: Hashira Training Arc', 'Demon Slayer Season 4']
+    }
+  };
+  
+  const normalizedBaseTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  
+  // Check if we have a known mapping
+  for (const [baseName, seasons] of Object.entries(seasonMappings)) {
+    if (normalizedBaseTitle.includes(baseName) || baseName.includes(normalizedBaseTitle)) {
+      if (seasons[season]) {
+        // Try each search term for this season
+        for (const searchTerm of seasons[season]) {
+          console.log(`Trying season mapping: "${searchTerm}" for ${title} S${season}`);
+          const showId = await findAllAnimeShow(searchTerm);
+          if (showId) {
+            console.log(`Found show via season mapping: ${showId}`);
+            return showId;
+          }
+        }
+      }
+    }
+  }
+  
+  // Generic season search strategies
+  const searchStrategies = [];
+  
+  if (season === 1) {
+    // For season 1, just search the base title
+    searchStrategies.push(title);
+  } else {
+    // For other seasons, try various naming conventions
+    searchStrategies.push(`${title} Season ${season}`);
+    searchStrategies.push(`${title} ${season}${getOrdinalSuffix(season)} Season`);
+    searchStrategies.push(`${title} Part ${season}`);
+    searchStrategies.push(title); // Fallback to base title
+  }
+  
+  for (const searchTerm of searchStrategies) {
+    console.log(`Searching AllAnime with: "${searchTerm}"`);
+    const showId = await findAllAnimeShow(searchTerm);
+    if (showId) {
+      return showId;
+    }
+  }
+  
+  return null;
+}
+
+// Helper for ordinal suffixes (1st, 2nd, 3rd, etc.)
+function getOrdinalSuffix(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// Handle meta requests - provide episode data from AllAnime
+// Also enriches metadata from AllAnime when Cinemeta data is poor
+async function handleMeta(catalog, type, id) {
+  // Decode URL-encoded ID
+  const decodedId = decodeURIComponent(id);
+  const baseId = decodedId.split(':')[0];
+  
+  console.log(`Meta request for ${baseId}`);
+  
+  // First check our catalog (supports tt*, mal-*, kitsu:*)
+  let anime = findAnimeById(catalog, baseId);
+  let cinemeta = null;
+  
+  // If not in catalog and it's an IMDB ID, try Cinemeta
+  if (!anime && baseId.startsWith('tt')) {
+    cinemeta = await fetchCinemetaMeta(baseId, type);
+    anime = cinemeta;
+  }
+  
+  if (!anime) {
+    console.log(`No anime found for meta: ${baseId}`);
+    return { meta: null };
+  }
+  
+  // Search AllAnime for this show
+  const showId = await findAllAnimeShow(anime.name);
+  if (!showId) {
+    console.log(`No AllAnime match for: ${anime.name}`);
+    return { meta: null };
+  }
+  
+  // Get full show details from AllAnime
+  const showDetails = await getAllAnimeShowDetails(showId);
+  if (!showDetails) {
+    console.log(`Failed to get AllAnime details for: ${showId}`);
+    return { meta: null };
+  }
+  
+  // Check if we need to enrich metadata from AllAnime
+  const needsEnrichment = isMetadataIncomplete(anime);
+  if (needsEnrichment) {
+    console.log(`Enriching metadata from AllAnime for: ${anime.name}`);
+  }
+  
+  // Build episodes from AllAnime data
+  const episodes = [];
+  const availableEps = showDetails.availableEpisodesDetail || {};
+  const subEpisodes = availableEps.sub || [];
+  const dubEpisodes = availableEps.dub || [];
+  
+  // Use sub episodes as the primary list (usually more complete)
+  const allEpisodes = [...new Set([...subEpisodes, ...dubEpisodes])].sort((a, b) => parseFloat(a) - parseFloat(b));
+  
+  for (const epNum of allEpisodes) {
+    const epNumber = parseFloat(epNum);
+    // Assume season 1 for now (most anime)
+    const season = 1;
+    
+    episodes.push({
+      id: `${baseId}:${season}:${Math.floor(epNumber)}`,
+      title: `Episode ${epNumber}`,
+      season: season,
+      episode: Math.floor(epNumber),
+      thumbnail: showDetails.thumbnail || anime.poster, // Use show poster as fallback thumbnail
+      released: new Date().toISOString() // AllAnime doesn't provide release dates easily
+    });
+  }
+  
+  // Build meta object with enrichment from AllAnime when needed
+  // Priority: Use AllAnime data when Cinemeta data is poor/missing
+  const meta = {
+    id: baseId,
+    type: 'series',
+    // Name: prefer AllAnime english name, fallback to anime name
+    name: showDetails.englishName || showDetails.name || anime.name,
+    // Poster: use AllAnime if Cinemeta is missing or if we need enrichment
+    poster: (needsEnrichment || !anime.poster) ? (showDetails.thumbnail || anime.poster) : anime.poster,
+    // Background: prefer AllAnime banner
+    background: showDetails.banner || anime.background,
+    // Description: use AllAnime if Cinemeta has poor/missing description
+    description: stripHtml(
+      (needsEnrichment || !anime.description) 
+        ? (showDetails.description || anime.description || '')
+        : anime.description
+    ),
+    // Genres: merge from both sources
+    genres: showDetails.genres || anime.genres || [],
+    runtime: anime.runtime,
+    videos: episodes,
+    releaseInfo: anime.releaseInfo || (showDetails.status === 'Releasing' ? 'Ongoing' : showDetails.status)
+  };
+  
+  console.log(`Returning meta with ${episodes.length} episodes for ${meta.name}${needsEnrichment ? ' (enriched from AllAnime)' : ''}`);
+  return { meta };
+}
+
+// Handle stream requests (using direct API)
+async function handleStream(catalog, type, id) {
+  // Decode URL-encoded ID first (Stremio sometimes sends %3A instead of :)
+  const decodedId = decodeURIComponent(id);
+  
+  // Parse ID: tt1234567 or tt1234567:1:5 or mal-12345:1:5
+  const parts = decodedId.split(':');
+  const baseId = parts[0];
+  const season = parts[1] ? parseInt(parts[1]) : 1;
+  const episode = parts[2] ? parseInt(parts[2]) : 1;
+  
+  console.log(`Stream request: baseId=${baseId}, season=${season}, episode=${episode}`);
+  
+  // Find anime in catalog (supports tt*, mal-*, kitsu:* IDs)
+  let anime = findAnimeById(catalog, baseId);
+  let showId = null;
+  
+  // If not in catalog and it's an IMDB ID, try Cinemeta
+  if (!anime && baseId.startsWith('tt')) {
+    console.log(`Anime not in catalog, trying Cinemeta for ${baseId}`);
+    anime = await fetchCinemetaMeta(baseId, type);
+  }
+  
+  // If still not found and it's a MAL ID, search AllAnime directly
+  if (!anime && baseId.startsWith('mal-')) {
+    console.log(`MAL ID detected, searching AllAnime directly for ${baseId}`);
+    const malId = baseId.replace('mal-', '');
+    
+    // Search AllAnime by MAL ID - try to get show details directly
+    try {
+      const showDetails = await getAllAnimeShowDetails(malId);
+      if (showDetails) {
+        showId = malId; // We have the MAL ID which AllAnime uses
+        anime = { name: showDetails.name || showDetails.englishName || 'Unknown' };
+        console.log(`Found AllAnime show via MAL ID: ${anime.name}`);
+      }
+    } catch (err) {
+      console.log(`AllAnime lookup by MAL ID failed: ${err.message}`);
+    }
+  }
+  
+  if (!anime) {
+    console.log(`No anime found for ${baseId}`);
+    return { streams: [] };
+  }
+  
+  // Search AllAnime for matching show (if we don't already have showId)
+  // For multi-season shows, we need to find the correct season entry
+  if (!showId) {
+    showId = await findAllAnimeShowForSeason(anime.name, season);
+  }
+  if (!showId) {
+    return { streams: [] };
+  }
+  
+  // Fetch streams directly from AllAnime API
+  try {
+    const streams = await getEpisodeSources(showId, episode);
+    
+    if (!streams || streams.length === 0) {
+      return { streams: [] };
+    }
+    
+    // Format streams for Stremio - use proxy for URLs requiring Referer header
+    const workerBaseUrl = 'https://animestream-addon.keypop3750.workers.dev';
+    
+    const formattedStreams = streams.map(stream => {
+      // Proxy URLs that require Referer header (fast4speed)
+      let streamUrl = stream.url;
+      if (stream.url.includes('fast4speed')) {
+        streamUrl = `${workerBaseUrl}/proxy/${encodeURIComponent(stream.url)}`;
+      }
+      
+      return {
+        name: `AnimeStream`,
+        title: `${stream.type || 'SUB'} - ${stream.quality || 'HD'}`,
+        url: streamUrl
+      };
+    });
+    
+    return { streams: formattedStreams };
+  } catch (e) {
+    console.error('Stream fetch error:', e);
+    return { streams: [] };
+  }
+}
+
 // ===== MAIN HANDLER =====
 
 export default {
@@ -419,6 +1118,46 @@ export default {
     
     const url = new URL(request.url);
     const path = url.pathname;
+    
+    // ===== VIDEO PROXY =====
+    // Proxy video streams to add required Referer header
+    if (path.startsWith('/proxy/')) {
+      const videoUrl = decodeURIComponent(path.replace('/proxy/', ''));
+      
+      try {
+        // Handle range requests for video seeking
+        const rangeHeader = request.headers.get('Range');
+        const headers = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://allanime.to/',
+          'Origin': 'https://allanime.to'
+        };
+        
+        if (rangeHeader) {
+          headers['Range'] = rangeHeader;
+        }
+        
+        const response = await fetch(videoUrl, { headers });
+        
+        // Return proxied video with CORS headers
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set('Access-Control-Allow-Origin', '*');
+        newHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        newHeaders.set('Access-Control-Allow-Headers', 'Range');
+        newHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+        
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: newHeaders
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: 'Proxy error', message: error.message }), {
+          status: 502,
+          headers: JSON_HEADERS
+        });
+      }
+    }
     
     // Health check (doesn't need data)
     if (path === '/health' || path === '/') {
@@ -525,6 +1264,119 @@ export default {
       const metas = paginated.map(formatAnimeMeta);
       
       return new Response(JSON.stringify({ metas }), { headers: JSON_HEADERS });
+    }
+    
+    // Debug route for stream tracing
+    const debugMatch = path.match(/^\/debug\/stream\/(.+)$/);
+    if (debugMatch) {
+      const id = debugMatch[1];
+      const parts = id.split(':');
+      const imdbId = parts[0];
+      const type = parts.length === 3 ? 'series' : 'movie';
+      const episode = parts[2] ? parseInt(parts[2]) : 1;
+      
+      const debugInfo = {
+        id,
+        imdbId,
+        episode,
+        catalogLoaded: !!catalog,
+        catalogSize: catalog ? catalog.length : 0
+      };
+      
+      // Find anime in catalog
+      let anime = findAnimeByImdbId(catalog, imdbId);
+      debugInfo.animeFound = !!anime;
+      debugInfo.source = anime ? 'catalog' : null;
+      
+      // If not in catalog, try Cinemeta
+      if (!anime) {
+        debugInfo.tryingCinemeta = true;
+        anime = await fetchCinemetaMeta(imdbId, type);
+        if (anime) {
+          debugInfo.animeFound = true;
+          debugInfo.source = 'cinemeta';
+        }
+      }
+      
+      if (anime) {
+        debugInfo.animeName = anime.name;
+        debugInfo.animeId = anime.id;
+      }
+      
+      if (anime) {
+        // Search AllAnime directly
+        try {
+          const results = await searchAllAnime(anime.name, 10);
+          debugInfo.searchResultCount = results.length;
+          
+          if (results.length > 0) {
+            debugInfo.firstResult = {
+              id: results[0].id,
+              title: results[0].title,
+              type: results[0].type
+            };
+            
+            // Run matching algorithm
+            const normalizedTitle = anime.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            debugInfo.normalizedTitle = normalizedTitle;
+            
+            const matchResults = results.map(show => {
+              const showName = (show.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const similarity = stringSimilarity(normalizedTitle, showName);
+              let score = 0;
+              if (showName === normalizedTitle) score = 100;
+              else if (showName.includes(normalizedTitle) || normalizedTitle.includes(showName)) score = 80;
+              else score = similarity * 0.9;
+              if (show.type === 'TV') score += 3;
+              
+              return {
+                id: show.id,
+                title: show.title,
+                normalizedTitle: showName,
+                similarity,
+                score,
+                isExactMatch: showName === normalizedTitle
+              };
+            });
+            
+            debugInfo.matchResults = matchResults;
+            debugInfo.bestMatch = matchResults.reduce((best, curr) => curr.score > best.score ? curr : best, matchResults[0]);
+            
+            // Also test stream fetching
+            if (debugInfo.bestMatch && debugInfo.bestMatch.score >= 60) {
+              const streams = await getEpisodeSources(debugInfo.bestMatch.id, episode);
+              debugInfo.streamsFound = streams.length;
+              if (streams.length > 0) {
+                debugInfo.firstStream = {
+                  url: streams[0].url.substring(0, 100) + '...',
+                  quality: streams[0].quality,
+                  type: streams[0].type
+                };
+              }
+            }
+          }
+        } catch (e) {
+          debugInfo.searchError = e.message;
+        }
+      }
+      
+      return new Response(JSON.stringify(debugInfo, null, 2), { headers: JSON_HEADERS });
+    }
+    
+    // Meta route: /meta/:type/:id.json or /{config}/meta/:type/:id.json
+    const metaMatch = path.match(/^(?:\/([^\/]+))?\/meta\/([^\/]+)\/(.+)\.json$/);
+    if (metaMatch) {
+      const [, configStr, type, id] = metaMatch;
+      const result = await handleMeta(catalog, type, id);
+      return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
+    }
+    
+    // Stream route: /stream/:type/:id.json or /{config}/stream/:type/:id.json
+    const streamMatch = path.match(/^(?:\/([^\/]+))?\/stream\/([^\/]+)\/(.+)\.json$/);
+    if (streamMatch) {
+      const [, configStr, type, id] = streamMatch;
+      const result = await handleStream(catalog, type, id);
+      return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
     }
     
     // 404 for unknown routes

@@ -94,6 +94,26 @@ function extractGenres(jikanAnime) {
 }
 
 /**
+ * Extract broadcast day from Jikan broadcast info
+ */
+function extractBroadcastDay(jikanAnime) {
+  if (jikanAnime.broadcast?.day) {
+    // Jikan returns "Fridays", "Saturdays", etc - convert to singular
+    const dayMap = {
+      'mondays': 'Monday',
+      'tuesdays': 'Tuesday',
+      'wednesdays': 'Wednesday',
+      'thursdays': 'Thursday',
+      'fridays': 'Friday',
+      'saturdays': 'Saturday',
+      'sundays': 'Sunday'
+    };
+    return dayMap[jikanAnime.broadcast.day.toLowerCase()] || null;
+  }
+  return null;
+}
+
+/**
  * Convert Jikan anime to our format
  */
 function jikanToMeta(jikanAnime) {
@@ -144,7 +164,8 @@ function jikanToMeta(jikanAnime) {
     episodes: jikanAnime.episodes || null,
     genres: extractGenres(jikanAnime),
     studios: (jikanAnime.studios || []).map(s => s.name),
-    aliases: jikanAnime.title_synonyms || []
+    aliases: jikanAnime.title_synonyms || [],
+    broadcastDay: extractBroadcastDay(jikanAnime)
   };
 }
 
@@ -190,6 +211,35 @@ async function fetchAiringAnime() {
 }
 
 /**
+ * Fetch schedule for all days of the week
+ */
+async function fetchSchedule() {
+  console.log('\n📅 Fetching weekly schedule from Jikan...');
+  
+  const scheduleAnime = [];
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  
+  for (const day of days) {
+    try {
+      console.log(`   Fetching ${day}...`);
+      const url = `${CONFIG.jikan.baseUrl}/schedules?filter=${day}`;
+      const data = await fetchWithRetry(url);
+      
+      if (data.data && data.data.length > 0) {
+        console.log(`   ${day}: ${data.data.length} anime`);
+        scheduleAnime.push(...data.data);
+      }
+      
+      await sleep(CONFIG.jikan.delayBetweenRequests);
+    } catch (err) {
+      console.error(`   Error fetching ${day}: ${err.message}`);
+    }
+  }
+  
+  return scheduleAnime;
+}
+
+/**
  * Main update function
  */
 async function updateDatabase() {
@@ -212,25 +262,56 @@ async function updateDatabase() {
   const database = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
   console.log(`   Current entries: ${database.catalog.length}`);
   
-  // Create lookup map
+  // Create lookup map by malId
   const catalogMap = new Map();
+  const catalogByName = new Map();
   for (const anime of database.catalog) {
-    catalogMap.set(anime.malId, anime);
+    if (anime.malId) catalogMap.set(anime.malId, anime);
+    if (anime.name) catalogByName.set(anime.name.toLowerCase(), anime);
   }
   
-  // Fetch airing anime
+  // Fetch schedule (includes broadcast day info)
+  const scheduleAnime = await fetchSchedule();
+  console.log(`   Fetched ${scheduleAnime.length} scheduled anime`);
+  
+  // Also fetch general airing list for any we might have missed
   const airingAnime = await fetchAiringAnime();
   console.log(`   Fetched ${airingAnime.length} airing anime`);
+  
+  // Merge (prefer schedule data as it has broadcast info)
+  const seenMalIds = new Set();
+  const allAnime = [];
+  
+  for (const anime of scheduleAnime) {
+    if (!seenMalIds.has(anime.mal_id)) {
+      seenMalIds.add(anime.mal_id);
+      allAnime.push(anime);
+    }
+  }
+  
+  for (const anime of airingAnime) {
+    if (!seenMalIds.has(anime.mal_id)) {
+      seenMalIds.add(anime.mal_id);
+      allAnime.push(anime);
+    }
+  }
   
   // Process updates
   console.log('\n[PROCESS] Processing updates...');
   
   let updated = 0;
   let added = 0;
+  let broadcastUpdated = 0;
   
-  for (const jikanAnime of airingAnime) {
+  for (const jikanAnime of allAnime) {
     const malId = jikanAnime.mal_id;
-    const existing = catalogMap.get(malId);
+    let existing = catalogMap.get(malId);
+    
+    // Also try to find by name if no malId match
+    if (!existing && jikanAnime.title) {
+      existing = catalogByName.get(jikanAnime.title.toLowerCase());
+    }
+    
     const newMeta = jikanToMeta(jikanAnime);
     
     if (existing) {
@@ -258,6 +339,20 @@ async function updateDatabase() {
         hasChanges = true;
       }
       
+      // Update broadcastDay if changed
+      if (newMeta.broadcastDay && newMeta.broadcastDay !== existing.broadcastDay) {
+        if (VERBOSE) console.log(`   Updated broadcastDay: ${existing.name} (${existing.broadcastDay} -> ${newMeta.broadcastDay})`);
+        existing.broadcastDay = newMeta.broadcastDay;
+        hasChanges = true;
+        broadcastUpdated++;
+      }
+      
+      // Also update malId if missing
+      if (!existing.malId && malId) {
+        existing.malId = malId;
+        hasChanges = true;
+      }
+      
       if (hasChanges) updated++;
       
     } else {
@@ -271,6 +366,7 @@ async function updateDatabase() {
   
   console.log(`\n[STATS] Update Summary:`);
   console.log(`   Updated: ${updated} anime`);
+  console.log(`   Broadcast days updated: ${broadcastUpdated}`);
   console.log(`   Added: ${added} anime`);
   console.log(`   Total: ${database.catalog.length} anime`);
   
@@ -312,6 +408,13 @@ function updateFilterOptions(catalog) {
   const genreCounts = new Map();
   const seasonCounts = new Map();
   const studioCounts = new Map();
+  const weekdayCounts = new Map();
+  
+  // Initialize weekdays in order
+  const orderedDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  for (const day of orderedDays) {
+    weekdayCounts.set(day, 0);
+  }
   
   for (const anime of catalog) {
     // Count genres
@@ -331,6 +434,14 @@ function updateFilterOptions(catalog) {
     if (anime.studios) {
       for (const studio of anime.studios) {
         studioCounts.set(studio, (studioCounts.get(studio) || 0) + 1);
+      }
+    }
+    
+    // Count weekdays (only for currently airing)
+    if (anime.status === 'ONGOING' && anime.broadcastDay) {
+      const day = anime.broadcastDay;
+      if (weekdayCounts.has(day)) {
+        weekdayCounts.set(day, weekdayCounts.get(day) + 1);
       }
     }
   }
@@ -360,6 +471,11 @@ function updateFilterOptions(catalog) {
     .slice(0, 200)
     .map(([studio, count]) => `${studio} (${count})`);
   
+  // Weekday options in order with counts
+  const weekdayOptions = orderedDays
+    .filter(day => weekdayCounts.get(day) > 0)
+    .map(day => `${day} (${weekdayCounts.get(day)})`);
+  
   const filterOptions = {
     genres: {
       withCounts: genreOptions,
@@ -372,6 +488,10 @@ function updateFilterOptions(catalog) {
     studios: {
       withCounts: studioOptions,
       values: Array.from(studioCounts.keys()).sort()
+    },
+    weekdays: {
+      withCounts: weekdayOptions,
+      list: orderedDays
     }
   };
   
