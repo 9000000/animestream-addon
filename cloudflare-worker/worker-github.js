@@ -7,7 +7,7 @@
 
 // ===== CONFIGURATION =====
 const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/Zen0-99/animestream-addon/master/data';
-const CACHE_TTL = 3600; // 1 hour cache for GitHub data
+const CACHE_TTL = 600; // 10 minutes cache for GitHub data (balance between freshness and performance)
 
 // ===== CONSTANTS =====
 const CORS_HEADERS = {
