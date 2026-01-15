@@ -390,6 +390,13 @@ const HIDDEN_DUPLICATE_ENTRIES = new Set([
   // Add more as needed
 ]);
 
+// Manual poster overrides for anime with broken/missing metahub posters
+const POSTER_OVERRIDES = {
+  'tt38691315': 'https://media.kitsu.app/anime/48892/poster_image/large-5f88b3b77cc4e5e6b6c98de3f23f9a15.jpeg', // Style of Hiroshi Nohara Lunch
+  'tt35348212': 'https://media.kitsu.app/anime/48653/poster_image/large-0b6cd6119aaea15d1fbcf3f12e7bb1f2.jpeg', // Kaijuu Sekai Seifuku
+  // Add more overrides as needed
+};
+
 function isHiddenDuplicate(anime) {
   return HIDDEN_DUPLICATE_ENTRIES.has(anime.id);
 }
@@ -423,11 +430,13 @@ function formatAnimeMeta(anime) {
     formatted.description = anime.description.substring(0, 200) + '...';
   }
   
-  // Use Cinemeta poster URLs for higher quality posters
-  // Format: https://images.metahub.space/poster/medium/{imdb_id}/img
-  if (anime.id && anime.id.startsWith('tt')) {
+  // Poster priority: 1) Manual override, 2) Metahub (Cinemeta), 3) Catalog (Kitsu)
+  if (POSTER_OVERRIDES[anime.id]) {
+    formatted.poster = POSTER_OVERRIDES[anime.id];
+  } else if (anime.id && anime.id.startsWith('tt')) {
     formatted.poster = `https://images.metahub.space/poster/medium/${anime.id}/img`;
   }
+  // If no IMDB ID, keep the catalog poster (Kitsu)
   
   return formatted;
 }
