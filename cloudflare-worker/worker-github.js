@@ -444,7 +444,251 @@ const METADATA_OVERRIDES = {
       'Takayanagi Tomoyo',
       'Nemoto Miyari'
     ]
-  }
+  },
+  'tt26443616': { // Auto-generated
+    runtime: '23 min',
+    rating: 6.01,
+    genres: ["Action","Adventure","Comedy","Fantasy"],
+    background: 'https://cdn.myanimelist.net/images/anime/1402/152287l.jpg',
+  },
+  'tt12787182': { // Auto-generated
+    runtime: '10 min',
+    rating: 6.15,
+    genres: ["Mystery"],
+    background: 'https://cdn.myanimelist.net/images/anime/1602/150098l.jpg',
+    cast: ["Iketani, Nobue","Katayama, Fukujuurou","Hasegawa, Ikumi"],
+  },
+  'tt38652044': { // Auto-generated
+    runtime: '23 min',
+    rating: 5.48,
+    genres: ["Action","Adventure","Fantasy","Isekai"],
+    background: 'https://cdn.myanimelist.net/images/anime/1282/102248l.jpg',
+    cast: ["Takahashi, Rie","Amasaki, Kouhei","Kubo, Yurika","Mizumori, Chiko","Mano, Ayumi"],
+  },
+  'tt37364267': { // Auto-generated
+    runtime: '22 min',
+    rating: 5.64,
+    genres: ["Action","Adventure","Sci-Fi","Space"],
+    background: 'https://cdn.myanimelist.net/images/anime/1821/150610l.jpg',
+    cast: ["Fairouz Ai","Tamura, Mutsumi","Horie, Yui","Ootsuka, Akio","Mitsuishi, Kotono"],
+  },
+  'tt38646949': { // Auto-generated
+    rating: 6.7,
+    genres: ["Fantasy"],
+    background: 'https://cdn.myanimelist.net/images/anime/1704/154459l.jpg',
+    cast: ["Hayami, Saori","Uchida, Maaya","Inomata, Satoshi","Shimazaki, Nobunaga","Okamura, Haruka"],
+  },
+  'tt37776400': { // Auto-generated
+    rating: 6.64,
+    genres: ["Adventure","Fantasy"],
+    background: 'https://cdn.myanimelist.net/images/anime/1874/151419l.jpg',
+    cast: ["Haneta, Chika","Matsuzaki, Nana","Ishiguro, Chihiro","Okada, Yuuki"],
+  },
+  'tt37894464': { // Auto-generated
+    genres: ["Slice of Life"],
+    background: 'https://cdn.myanimelist.net/images/anime/1550/148313l.jpg',
+  },
+  'tt37509404': { // Auto-generated
+    genres: ["Slice of Life","Anthropomorphic"],
+    background: 'https://cdn.myanimelist.net/images/anime/1581/150017l.jpg',
+    cast: ["Hikasa, Youko","Izawa, Shiori","Kitou, Akari","Shiraishi, Haruka","Ootani, Ikue"],
+  },
+  'tt39281420': { // Auto-generated
+    rating: 6.31,
+    genres: ["Slice of Life","Anthropomorphic"],
+    background: 'https://cdn.myanimelist.net/images/anime/1987/152302l.jpg',
+    cast: ["Uchida, Aya","Uchida, Aya","Uchida, Aya","Uchida, Aya"],
+  },
+  'tt12895414': { // Auto-generated
+    genres: ["Violence","Action","Anthropomorphism","Shounen","Drama","Anime Influenced"],
+    background: 'https://cdn.myanimelist.net/images/anime/1257/152759l.jpg',
+  },
+  'tt1978960': { // Auto-generated
+    background: 'https://cdn.myanimelist.net/images/anime/2/55107l.jpg',
+  },
+  'tt32158870': { // Auto-generated
+    runtime: '23 min',
+    rating: 6.49,
+    cast: ["Fujidera, Minori","Hiratsuka, Sae","Kubo, Yurika","Hibi, Yuriko","Taichi, You"],
+  },
+  'tt13352178': { // Auto-generated
+    rating: 6.41,
+    description: 'A web series about Hello Kitty and friends living in their own town.',
+    cast: ["Hayashibara, Megumi"],
+  },
+  'tt37532599': { // Auto-generated
+    runtime: '24 min',
+    rating: 6.55,
+    description: 'Reboot of the 80s anime Samurai Troopers (Ronin Warriors).',
+  },
+  'tt29661543': { // Auto-generated
+    genres: ["Idol","Comedy","Anime Influenced","Fantasy","Cooking"],
+  },
+  'tt34852231': { // Auto-generated
+    runtime: '25 min',
+    cast: ["Hasegawa, Ikumi","Anzai, Chika","Nakamura, Yuuichi","Sakura, Ayane","Seto, Asami"],
+  },
+  'tt32832424': { // Auto-generated
+    runtime: '23 min',
+    rating: 5.91,
+  },
+  'tt38980285': { // Auto-generated
+    runtime: '24 min',
+    rating: 6.75,
+  },
+  'tt32336365': { // Auto-generated
+    runtime: '23 min',
+    rating: 7.97,
+  },
+  'tt38646611': { // Auto-generated
+    runtime: '4 min',
+  },
+  'tt38978132': { // Auto-generated
+    rating: 6.43,
+    cast: ["Nanami, Karin","Tachibana, Azusa","Sumi, Tomomi Jiena","Yusa, Kouji","Kawanishi, Kengo"],
+  },
+  'tt27517921': { // Auto-generated
+    rating: 7.81,
+    description: 'In the Cangyun Continent, the Medicine Sage Yun Gu was brutally murdered due to possessing one of the Seven Heavenly Treasures, the Sky Poison Pearl, which made it the object of desire for the entire realm. Yun Che, his disciple, carried the treasure to seek revenge for his master and caused boundless bloodshed in the process. Eventually, he was cornered by formidable foes at the Desolate Sky Cliff. Unyielding, Yun Che swallowed the poison pearl and leaped off the cliff to his death. \n\nHowever, guided by an unknown power, his consciousness traversed time and space, awakening in the body of a young boy named Xiao Che in the Flowing Cloud City of the Tianxuan Continent. Xiao Che was born with damaged profound veins, rendering him unable to cultivate profound energy. He was widely ridiculed as a renowned waste within Flowing Cloud City. Due to a pact between their parents, he unexpectedly married Xia Qingyue, the most beautiful woman in the city and a disciple of the Ice Wind Immortal Palace. \n\nJealousy consumed Xiao Yulong, a member of the same clan, and on Xiao Che\'s wedding day, he attempted to poison him. However, thanks to Yun Che\'s time-traveling experience, Xiao Che managed to survive, merging the experiences of two lifetimes into one. Through a series of fortunate events, he also harbored the soul of the enigmatic and extraordinarily gifted girl, Jasmine, who resided within the Sky Poison Pearl. From then on, he embarked on a bizarre and unpredictable path filled with extraordinary challenges.',
+  },
+  'tt38980445': { // Auto-generated
+    runtime: '23 min',
+    rating: 7.26,
+  },
+  'tt27432264': { // Auto-generated
+    rating: 8.44,
+  },
+  'tt34710525': { // Auto-generated
+    runtime: '25 min',
+    rating: 7.22,
+  },
+  'tt27865962': { // Auto-generated
+    runtime: '23 min',
+    rating: 6.8,
+  },
+  'tt37196939': { // Auto-generated
+    runtime: '23 min',
+    rating: 6.96,
+  },
+  'tt38969275': { // Auto-generated
+    runtime: '23 min',
+    rating: 7.24,
+  },
+  'tt38037470': { // Auto-generated
+    runtime: '23 min',
+    rating: 5.98,
+  },
+  'tt31608637': { // Auto-generated
+    rating: 7.24,
+    description: 'As a loyal disciple, Ye Chen dedicated himself to guard the spiritual medicine field for his sect. But, during a fight with enemies, the spiritual field was destroyed. His loyalty and dedicating to the sect could not save him. The loyalty he thought he had obtained from his peers and lover, could not save him from betrayal. Thus, he was shamelessly banished from the sect. With the help of a flame falling from heaven, Ye Chen began to develop himself into a stronger cultivator. Battled against his opponents, unfolded his legendary life and rewrote his own story...',
+  },
+  'tt33309549': { // Auto-generated
+    runtime: '26 min',
+    rating: 7.88,
+  },
+  'tt38253018': { // Auto-generated
+    runtime: '25 min',
+    rating: 7.35,
+  },
+  'tt37137805': { // Auto-generated
+    runtime: '24 min',
+    rating: 7.31,
+  },
+  'tt38128737': { // Auto-generated
+    runtime: '3 min',
+    rating: 6.06,
+  },
+  'tt12826684': { // Auto-generated
+    rating: 6.05,
+  },
+  'tt34623148': { // Auto-generated
+    description: 'The series follows children in various adventurous situations while weaving information about science into the story.',
+  },
+  'tt33349897': { // Auto-generated
+    runtime: '23 min',
+  },
+  'tt28197251': { // Auto-generated
+    cast: ["Hioka, Natsumi","Yomichi, Yuki","Nanase, Ayaka","Takahashi, Shinya","Yamamoto, Kanehira"],
+  },
+  'tt0306365': { // Auto-generated
+    runtime: '10 min',
+  },
+  'tt0367414': { // Auto-generated
+    runtime: '24 min',
+  },
+  'tt32832433': { // Auto-generated
+    runtime: '23 min',
+  },
+  'tt38572776': { // Auto-generated
+    runtime: '13 min',
+  },
+  'tt32535912': { // Auto-generated
+    runtime: '23 min',
+  },
+  'tt35769369': { // Auto-generated
+    rating: 7.22,
+  },
+  'tt38648925': { // Auto-generated
+    rating: 6.1,
+  },
+  'tt0283783': { // Auto-generated
+    rating: 6.47,
+  },
+  'tt37499375': { // Auto-generated
+    rating: 7.05,
+  },
+  'tt28022382': { // Auto-generated
+    rating: 7.94,
+  },
+  'tt17163876': { // Auto-generated
+    rating: 5.75,
+  },
+  'tt15816496': { // Auto-generated
+    rating: 7.28,
+  },
+  'tt26997679': { // Auto-generated
+    rating: 8.51,
+  },
+  'tt37815384': { // Auto-generated
+    rating: 5.6,
+  },
+  'tt35346388': { // Auto-generated
+    rating: 5.86,
+  },
+  'tt38976904': { // Auto-generated
+    rating: 6.35,
+  },
+  'tt34852961': { // Auto-generated
+    rating: 7.26,
+  },
+  'tt34715295': { // Auto-generated
+    rating: 6.68,
+  },
+  'tt27617390': { // Auto-generated
+    rating: 7.72,
+  },
+  'tt36270200': { // Auto-generated
+    rating: 6.02,
+  },
+  'tt36632066': { // Auto-generated
+    rating: 6.75,
+  },
+  'tt33501934': { // Auto-generated
+    rating: 8.24,
+  },
+  'tt37536527': { // Auto-generated
+    rating: 8.4,
+  },
+  'tt34382834': { // Auto-generated
+    rating: 7.42,
+  },
+  'tt32649136': { // Auto-generated
+    rating: 7.92,
+  },
+  'tt36534643': { // Auto-generated
+    rating: 6.08,
+  },
+
 };
 
 function isHiddenDuplicate(anime) {
