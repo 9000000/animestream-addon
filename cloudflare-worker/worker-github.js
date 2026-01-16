@@ -394,7 +394,42 @@ const HIDDEN_DUPLICATE_ENTRIES = new Set([
 const POSTER_OVERRIDES = {
   'tt38691315': 'https://media.kitsu.app/anime/50202/poster_image/large-b0a51e52146b1d81d8d0924b5a8bbe82.jpeg', // Style of Hiroshi Nohara Lunch
   'tt35348212': 'https://media.kitsu.app/anime/49843/poster_image/large-805a2f6fe1d62a8f6221dd07c7bce005.jpeg', // Kaijuu Sekai Seifuku (TV)
-  // Add more overrides as needed
+  'tt12895414': 'https://media.kitsu.app/anime/poster_images/43801/large.jpg', // The SpongeBob SquarePants Anime
+  'tt12787182': 'https://media.kitsu.app/anime/poster_images/43256/large.jpg', // Fushigi Dagashiya: Zenitendou
+  'tt1978960': 'https://media.kitsu.app/anime/poster_images/5007/large.jpg', // Knyacki!
+  'tt37776400': 'https://media.kitsu.app/anime/50096/poster_image/large-9ca5e6ff11832a8bf554697c1f183dbf.jpeg', // Dungeons & Television
+  'tt37578217': 'https://media.kitsu.app/anime/poster_images/43617/large.jpg', // Ling Cage
+  'tt37894464': 'https://media.kitsu.app/anime/49649/poster_image/large-37718e736a76ba0e3d01beb64ad80866.jpeg', // Let's Roll, Cinnamoroll!
+  'tt37509404': 'https://media.kitsu.app/anime/49961/poster_image/large-3f376bc5492dd5de03c4d13295604f95.jpeg', // Gekkan! Nanmono Anime
+  'tt29661543': 'https://media.kitsu.app/anime/47617/poster_image/large-40aa34b09277d1ec2f34c52e83b6538d.jpeg', // #holoEN3DRepeat
+  'tt39281420': 'https://media.kitsu.app/anime/50253/poster_image/large-5c560f04c35705e046a945dfc5c5227f.jpeg', // Koala's Diary
+  'tt37836273': 'https://media.kitsu.app/anime/50151/poster_image/large-080388c03105dc38f36a583e79987434a0.jpeg', // Shuukan Ranobe Anime
+};
+
+// Manual metadata overrides for anime with incomplete catalog data
+// These will be merged with catalog data, overriding specific fields
+const METADATA_OVERRIDES = {
+  'tt38691315': { // Style of Hiroshi Nohara Lunch
+    runtime: '24 min',
+    rating: 6.4,
+    genres: ['Animation', 'Comedy']
+  },
+  'tt37578217': { // Ling Cage
+    description: 'Fallen commander Marc destroyed the Lighthouse. Guided by the mysterious Bai Yue Ling 4068, he returns to the surface. As Mark and Penny journey together to find Bai Yue Ling headquarters, they face numerous crises, including attacks from colossi and Mana beasts, as well as challenges from the mysterious Mark 4079.',
+    rating: 9.2
+  },
+  'tt38037498': { // There was a Cute Girl in the Hero\'s Party
+    rating: 7.6,
+    genres: ['Animation', 'Action', 'Adventure', 'Fantasy']
+  },
+  'tt38647635': { // The Holy Grail of Eris
+    rating: 7.9,
+    genres: ['Animation', 'Drama', 'Mystery']
+  },
+  'tt38798044': { // The Case Book of Arne
+    rating: 6.5,
+    genres: ['Animation', 'Mystery']
+  }
 };
 
 function isHiddenDuplicate(anime) {
@@ -416,18 +451,25 @@ function isMovieType(anime) {
 
 function formatAnimeMeta(anime) {
   const formatted = { ...anime };
+  
+  // Apply metadata overrides first
+  if (METADATA_OVERRIDES[anime.id]) {
+    const overrides = METADATA_OVERRIDES[anime.id];
+    Object.assign(formatted, overrides);
+  }
+  
   formatted.type = anime.subtype === 'movie' ? 'movie' : 'series';
   
-  if (anime.rating !== null && anime.rating !== undefined && !isNaN(anime.rating)) {
-    formatted.imdbRating = anime.rating.toFixed(1);
+  if (formatted.rating !== null && formatted.rating !== undefined && !isNaN(formatted.rating)) {
+    formatted.imdbRating = formatted.rating.toFixed(1);
   }
   
-  if (anime.year) {
-    formatted.releaseInfo = anime.year.toString();
+  if (formatted.year) {
+    formatted.releaseInfo = formatted.year.toString();
   }
   
-  if (anime.description && anime.description.length > 200) {
-    formatted.description = anime.description.substring(0, 200) + '...';
+  if (formatted.description && formatted.description.length > 200) {
+    formatted.description = formatted.description.substring(0, 200) + '...';
   }
   
   // Poster priority: 1) Manual override, 2) Metahub (Cinemeta), 3) Catalog (Kitsu)
