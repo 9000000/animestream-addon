@@ -404,6 +404,9 @@ const POSTER_OVERRIDES = {
   'tt29661543': 'https://media.kitsu.app/anime/47617/poster_image/large-40aa34b09277d1ec2f34c52e83b6538d.jpeg', // #holoEN3DRepeat
   'tt39281420': 'https://media.kitsu.app/anime/50253/poster_image/large-5c560f04c35705e046a945dfc5c5227f.jpeg', // Koala's Diary
   'tt37836273': 'https://cdn.myanimelist.net/images/anime/1260/150826l.jpg', // Shuukan Ranobe Anime (from MAL)
+  'tt36270770': 'https://media.kitsu.app/anime/46581/poster_image/large-eb771819d7a6a152d1925f297bcf1928.jpeg', // ROAD OF NARUTO
+  'tt27551813': 'https://cdn.myanimelist.net/images/anime/1921/135489l.jpg', // Idol (from MAL)
+  'tt39287518': 'https://media.kitsu.app/anime/49998/poster_image/large-16edb06a60a6644010b55d4df6a2012a.jpeg', // Kaguya-sama Stairway
 };
 
 // Manual metadata overrides for anime with incomplete catalog data
@@ -430,8 +433,9 @@ const METADATA_OVERRIDES = {
     rating: 6.5,
     genres: ['Animation', 'Mystery']
   },
-  'tt35348212': { // Kaijuu Sekai Seifuku (TV) - FAKE IMDB ID, real anime (MAL 60070)
-    genres: ['Slice of Life']
+  'tt35348212': { // Kaijuu Sekai Seifuku (TV) - FAKE IMDB ID, real anime (MAL 56107)
+    genres: ['Slice of Life', 'Pets'],
+    background: 'https://cdn.myanimelist.net/images/anime/1859/137406l.jpg'
   },
   'tt37836273': { // Shuukan Ranobe Anime - FAKE IMDB ID, real anime (MAL 61846)
     runtime: '23 min',
@@ -687,6 +691,21 @@ const METADATA_OVERRIDES = {
   },
   'tt36534643': { // Auto-generated
     rating: 6.08,
+  },
+  'tt36270770': { // ROAD OF NARUTO
+    genres: ['Action', 'Fantasy', 'Martial Arts'],
+    cast: ['Sugiyama, Noriaki', 'Takeuchi, Junko'],
+  },
+  'tt13544716': { // My Hero Academia Movie 2: Heroes Rising Epilogue Plus
+    genres: ['Comedy'],
+    background: 'https://cdn.myanimelist.net/images/anime/1447/110165l.jpg',
+    cast: ['Okamoto, Nobuhiko', 'Yamashita, Daiki', 'Terasaki, Yuka', 'Kurosawa, Tomoyo'],
+  },
+  'tt27551813': { // Idol
+    genres: ['School', 'Music', 'Slice of Life', 'Comedy', 'Sci-Fi', 'Mecha'],
+  },
+  'tt21030032': { // Oshi no Ko
+    runtime: '30 min',
   },
 
 };
@@ -1263,9 +1282,10 @@ async function handleMeta(catalog, type, id) {
   }
   
   // Apply metadata overrides FIRST before any enrichment checks
-  if (METADATA_OVERRIDES[baseId]) {
+  const hasOverride = !!METADATA_OVERRIDES[baseId];
+  const overrides = hasOverride ? METADATA_OVERRIDES[baseId] : {};
+  if (hasOverride) {
     console.log(`Applying metadata overrides for ${baseId}`);
-    const overrides = METADATA_OVERRIDES[baseId];
     anime = { ...anime, ...overrides };
   }
   
@@ -1343,11 +1363,14 @@ async function handleMeta(catalog, type, id) {
   // Clean up description - remove source citations
   const cleanDescription = stripHtml(bestDescription).replace(/\s*\(Source:.*?\)\s*$/i, '').trim();
   
-  const bestBackground = hasAllAnime && showDetails.banner ? showDetails.banner :
+  const bestBackground = overrides.background ? overrides.background :
+                         hasAllAnime && showDetails.banner ? showDetails.banner :
                          hasCinemeta && cinemeta.background ? cinemeta.background :
                          anime.background;
   
-  const bestGenres = hasAllAnime && showDetails.genres ? showDetails.genres :
+  // Priority: Manual override > AllAnime > Cinemeta > Catalog
+  const bestGenres = overrides.genres ? overrides.genres :
+                     hasAllAnime && showDetails.genres ? showDetails.genres :
                      hasCinemeta && cinemeta.genres ? cinemeta.genres :
                      anime.genres || [];
   
