@@ -287,6 +287,15 @@ async function enrichAnime(anime, missing) {
     console.log(`    MAL: ${mal ? `found (${mal.title}, score=${mal.matchScore})` : 'not found'}`);
   }
   
+  // IMPORTANT: Only generate overrides for fields that Cinemeta CANNOT provide.
+  // The worker already fetches Cinemeta at runtime, so we don't need overrides
+  // for data that Cinemeta has.
+  const cinemataHasRuntime = cinemeta?.runtime;
+  const cinemataHasGenres = cinemeta?.genres?.length > 0;
+  const cinemataHasBackground = cinemeta?.background;
+  const cinemataHasDescription = cinemeta?.description?.length > 50;
+  const cinemataHasCast = cinemeta?.cast?.length > 0;
+  
   // Priority: Kitsu poster > MAL poster (for poster overrides - Kitsu is higher quality)
   if (missing.poster) {
     if (kitsu?.posterImage?.large) {
@@ -303,8 +312,8 @@ async function enrichAnime(anime, missing) {
     }
   }
   
-  // Runtime: MAL > Kitsu
-  if (missing.runtime) {
+  // Runtime: Only override if Cinemeta doesn't have it
+  if (missing.runtime && !cinemataHasRuntime) {
     if (mal?.duration) {
       // Parse "24 min per ep" -> "24 min"
       const match = mal.duration.match(/(\d+)\s*min/i);
@@ -316,7 +325,7 @@ async function enrichAnime(anime, missing) {
     }
   }
   
-  // Rating: MAL > Cinemeta
+  // Rating: MAL > Cinemeta (always use MAL if available as it's more anime-specific)
   if (missing.rating) {
     if (mal?.score) {
       enrichment.metadata.rating = mal.score;
@@ -325,32 +334,28 @@ async function enrichAnime(anime, missing) {
     }
   }
   
-  // Genres: MAL (combines genres + themes) > Kitsu > Cinemeta
-  if (missing.genres) {
+  // Genres: Only override if Cinemeta doesn't have them
+  if (missing.genres && !cinemataHasGenres) {
     if (mal?.genres?.length > 0) {
       // Combine genres and themes from MAL
       const allGenres = [...new Set([...(mal.genres || []), ...(mal.themes || [])])];
       enrichment.metadata.genres = allGenres.slice(0, 8);
     } else if (kitsu?.extractedGenres?.length > 0) {
       enrichment.metadata.genres = kitsu.extractedGenres.slice(0, 8);
-    } else if (cinemeta?.genres?.length > 0) {
-      enrichment.metadata.genres = cinemeta.genres;
     }
   }
   
-  // Background: Kitsu cover > MAL image > Cinemeta
-  if (missing.background) {
+  // Background: Only override if Cinemeta doesn't have it
+  if (missing.background && !cinemataHasBackground) {
     if (kitsu?.coverImage?.large) {
       enrichment.metadata.background = kitsu.coverImage.large;
     } else if (mal?.background) {
       enrichment.metadata.background = mal.background;
-    } else if (cinemeta?.background) {
-      enrichment.metadata.background = cinemeta.background;
     }
   }
   
-  // Description: MAL > Cinemeta > Kitsu
-  if (missing.description) {
+  // Description: Only override if Cinemeta doesn't have it
+  if (missing.description && !cinemataHasDescription) {
     if (mal?.synopsis && mal.synopsis.length > 50) {
       // Clean up MAL synopsis
       let desc = mal.synopsis
@@ -358,15 +363,13 @@ async function enrichAnime(anime, missing) {
         .replace(/\(Source:.*?\)/g, '')
         .trim();
       enrichment.metadata.description = desc;
-    } else if (cinemeta?.description && cinemeta.description.length > 50) {
-      enrichment.metadata.description = cinemeta.description;
     } else if (kitsu?.description && kitsu.description.length > 50) {
       enrichment.metadata.description = kitsu.description;
     }
   }
   
-  // Cast: MAL voice actors
-  if (missing.cast && malCast.length > 0) {
+  // Cast: Only override if Cinemeta doesn't have it (Cinemeta rarely has anime cast)
+  if (missing.cast && !cinemataHasCast && malCast.length > 0) {
     enrichment.metadata.cast = malCast;
   }
   
