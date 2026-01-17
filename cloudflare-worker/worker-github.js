@@ -905,6 +905,13 @@ const POSTER_OVERRIDES = {
   'tt39287518': 'https://media.kitsu.app/anime/49998/poster_image/large-16edb06a60a6644010b55d4df6a2012a.jpeg', // Kaguya-sama Stairway
   'tt37196939': 'https://media.kitsu.app/anime/49966/poster_image/large-420c08752313cc1ad419f79aa4621a8d.jpeg', // Wash it All Away
   'tt39050141': 'https://media.kitsu.app/anime/50371/poster_image/large-e9aaad3342085603c1e3d2667a5954ab.jpeg', // Love Through A Prism
+  // Missing Metahub posters (2025-2026 anime not yet in Metahub)
+  'tt39254742': 'https://media.kitsu.app/anime/50180/poster_image/large-7b7ec122dbdf5f2fd845648a1a207a2a.jpeg', // There's No Freaking Way I'll Be Your Lover! Unless… ~Next Shine~
+  'tt36294552': 'https://media.kitsu.app/anime/47243/poster_image/large-94c32b9f2549fc89ba03506e97129e47.jpeg', // Trigun Stargaze
+  'tt38268282': 'https://media.kitsu.app/anime/49847/poster_image/large-ebde271efe94d783d426087bf357280d.jpeg', // Steel Ball Run: JoJo's Bizarre Adventure
+  'tt37532731': 'https://media.kitsu.app/anime/49372/poster_image/large-13c34534bcbb483eff2e4bd8c6124430.jpeg', // You and I are Polar Opposites
+  'tt32482998': 'https://media.kitsu.app/anime/50431/poster_image/large-22e1364623ae07665ab286bdbad6d02c.jpeg', // Duel Masters LOST: Boukyaku no Taiyou
+  'tt36592708': 'https://media.kitsu.app/anime/48198/poster_image/large-b8e67c6a35c2a5e94b5c0b82e0f5a3c7.jpeg', // There's No Freaking Way I'll be Your Lover! Unless...
 };
 
 // Manual metadata overrides for anime with incomplete catalog data
@@ -1248,12 +1255,16 @@ function formatAnimeMeta(anime) {
   
   // Poster priority:
   // 1) Manual override (for broken posters)
-  // 2) Metahub poster if IMDB ID exists (has nice title overlay like Cinemeta)
-  // 3) Fallback to catalog poster (Kitsu) for non-IMDB content
+  // 2) For 2025+ anime, keep Kitsu poster (Metahub often doesn't have recent content)
+  // 3) For older anime with IMDB ID, use Metahub (has nice title overlay like Cinemeta)
+  // 4) Fallback to catalog poster (Kitsu) for non-IMDB content
   if (POSTER_OVERRIDES[anime.id]) {
     formatted.poster = POSTER_OVERRIDES[anime.id];
+  } else if (anime.year && anime.year >= 2025) {
+    // Keep catalog poster (Kitsu) for recent anime - Metahub doesn't have them yet
+    // formatted.poster already set from anime object
   } else if (anime.id && anime.id.startsWith('tt')) {
-    // Always use Metahub for IMDB IDs - they have title overlays like Cinemeta
+    // Use Metahub for older IMDB content - has title overlays like Cinemeta
     formatted.poster = `https://images.metahub.space/poster/medium/${anime.id}/img`;
   }
   // If no IMDB ID, keep the catalog poster (Kitsu)
