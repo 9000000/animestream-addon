@@ -8,6 +8,7 @@
 // ===== CONFIGURATION =====
 const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/Zen0-99/animestream-addon/master/data';
 const CACHE_TTL = 21600; // 6 hours cache for GitHub data (catalog is static, rarely updates)
+const CACHE_BUSTER = 'v9'; // Change this to bust cache after catalog updates
 const ALLANIME_CACHE_TTL = 300; // 5 minutes for AllAnime API responses (streams change frequently)
 const MANIFEST_CACHE_TTL = 86400; // 24 hours for manifest (rarely changes)
 const CATALOG_HTTP_CACHE = 21600; // 6 hours HTTP cache for catalog responses (static content)
@@ -19,6 +20,88 @@ const RATE_LIMIT_WINDOW = 60000; // 1 minute window
 const RATE_LIMIT_MAX_REQUESTS = 120; // Max 120 requests per minute per IP (2/sec average)
 const rateLimitMap = new Map();
 const MAX_RATE_LIMIT_ENTRIES = 1000; // Prevent memory issues
+
+// ===== HAGLUND API (ID MAPPING) CONFIGURATION =====
+// Haglund API maps between AniList, MAL, Kitsu, and IMDB IDs
+// Source: https://github.com/aliyss/syncribullet uses this API
+const HAGLUND_API_BASE = 'https://arm.haglund.dev/api/v2';
+const HAGLUND_CACHE_TTL = 86400; // 24 hour cache for ID mappings (they don't change often)
+
+// Caches for external API data
+let haglundIdCache = new Map();
+const MAX_HAGLUND_CACHE_ENTRIES = 500; // Prevent memory issues
+
+// ===== SCROBBLING CONFIGURATION =====
+// AniList API for scrobbling (updating watch progress)
+// Based on syncribullet: https://github.com/aliyss/syncribullet
+const ANILIST_API_BASE = 'https://graphql.anilist.co';
+const ANILIST_OAUTH_URL = 'https://anilist.co/api/v2/oauth/authorize';
+
+// MAL API for scrobbling (requires OAuth2)
+const MAL_API_BASE = 'https://api.myanimelist.net/v2';
+const MAL_OAUTH_URL = 'https://myanimelist.net/v1/oauth2/authorize';
+const MAL_CLIENT_ID = 'e1c53f5d91d73133d628b7e2f56df992';
+
+// ===== USER TOKEN CACHE =====
+// In-memory cache to reduce KV reads (tokens are read frequently during playback)
+// Cache TTL: 5 minutes - balance between freshness and KV usage
+const userTokenCache = new Map();
+const USER_TOKEN_CACHE_TTL = 300000; // 5 minutes
+const MAX_USER_TOKEN_CACHE_ENTRIES = 200;
+
+// Helper to get user tokens (with in-memory cache to reduce KV reads)
+async function getUserTokens(userId, env) {
+  if (!userId || !env?.USER_TOKENS) return null;
+  
+  // Check in-memory cache first
+  const cached = userTokenCache.get(userId);
+  if (cached && Date.now() - cached.timestamp < USER_TOKEN_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  // Cleanup cache if too large
+  if (userTokenCache.size > MAX_USER_TOKEN_CACHE_ENTRIES) {
+    const now = Date.now();
+    for (const [key, value] of userTokenCache) {
+      if (now - value.timestamp > USER_TOKEN_CACHE_TTL) {
+        userTokenCache.delete(key);
+      }
+    }
+  }
+  
+  try {
+    const data = await env.USER_TOKENS.get(userId, 'json');
+    if (data) {
+      userTokenCache.set(userId, { data, timestamp: Date.now() });
+    }
+    return data;
+  } catch (error) {
+    console.error('[KV] Error reading user tokens:', error.message);
+    return null;
+  }
+}
+
+// Helper to save user tokens (writes to KV, updates cache)
+async function saveUserTokens(userId, tokens, env) {
+  if (!userId || !env?.USER_TOKENS) return false;
+  
+  try {
+    await env.USER_TOKENS.put(userId, JSON.stringify(tokens));
+    userTokenCache.set(userId, { data: tokens, timestamp: Date.now() });
+    return true;
+  } catch (error) {
+    console.error('[KV] Error saving user tokens:', error.message);
+    return false;
+  }
+}
+
+// Generate a short user ID from AniList/MAL user info
+function generateUserId(anilistUser, malUser) {
+  if (anilistUser?.id) return `al_${anilistUser.id}`;
+  if (malUser?.id) return `mal_${malUser.id}`;
+  // Fallback: random ID
+  return `u_${Math.random().toString(36).substring(2, 10)}`;
+}
 
 // ===== CONSTANTS =====
 const CORS_HEADERS = {
@@ -80,6 +163,528 @@ function jsonResponse(data, options = {}) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+// ===== HAGLUND API (ID MAPPING) FUNCTIONS =====
+// Maps between AniList, MAL, Kitsu, and IMDB IDs
+// Source pattern from syncribullet: https://github.com/aliyss/syncribullet
+// NOTE: Runtime MAL schedule API calls have been removed - we use pre-scraped
+// broadcastDay data from catalog.json instead (updated via incremental-update.js)
+
+/**
+ * Get ID mappings from Haglund API
+ * @param {string} id - The ID to look up
+ * @param {string} source - Source type: 'anilist', 'mal', 'kitsu', or 'imdb'
+ * @returns {Promise<Object>} Object with mapped IDs: { anilist, mal, kitsu, imdb }
+ */
+async function getIdMappings(id, source) {
+  const cacheKey = `${source}:${id}`;
+  
+  // Check cache first
+  if (haglundIdCache.has(cacheKey)) {
+    return haglundIdCache.get(cacheKey);
+  }
+  
+  // Cleanup cache if too large
+  if (haglundIdCache.size > MAX_HAGLUND_CACHE_ENTRIES) {
+    const entries = Array.from(haglundIdCache.entries());
+    const toDelete = entries.slice(0, Math.floor(MAX_HAGLUND_CACHE_ENTRIES / 2));
+    toDelete.forEach(([key]) => haglundIdCache.delete(key));
+  }
+  
+  try {
+    const url = `${HAGLUND_API_BASE}/ids?source=${source}&id=${id}&include=anilist,kitsu,myanimelist,imdb`;
+    const response = await fetch(url, {
+      cf: { cacheTtl: HAGLUND_CACHE_TTL, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Haglund API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Normalize the response
+    const mappings = {
+      anilist: data.anilist ? parseInt(data.anilist) : null,
+      mal: data.myanimelist ? parseInt(data.myanimelist) : null,
+      kitsu: data.kitsu ? parseInt(data.kitsu) : null,
+      imdb: data.imdb || null
+    };
+    
+    // Cache the result
+    haglundIdCache.set(cacheKey, mappings);
+    
+    return mappings;
+  } catch (error) {
+    console.error(`[Haglund] Error fetching ID mappings for ${source}:${id}:`, error.message);
+    return { anilist: null, mal: null, kitsu: null, imdb: null };
+  }
+}
+
+/**
+ * Get ID mappings from IMDB ID (handles multi-season anime)
+ * @param {string} imdbId - The IMDB ID (e.g., "tt12343534")
+ * @param {number} season - Optional season number for multi-season anime
+ * @returns {Promise<Object>} Object with mapped IDs
+ */
+async function getIdMappingsFromImdb(imdbId, season = null) {
+  const cacheKey = season ? `imdb:${imdbId}:${season}` : `imdb:${imdbId}`;
+  
+  // Check cache first
+  if (haglundIdCache.has(cacheKey)) {
+    return haglundIdCache.get(cacheKey);
+  }
+  
+  try {
+    const url = `${HAGLUND_API_BASE}/imdb?id=${imdbId}&include=anilist,kitsu,myanimelist,imdb`;
+    const response = await fetch(url, {
+      cf: { cacheTtl: HAGLUND_CACHE_TTL, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Haglund API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // IMDB endpoint returns an array for multi-season anime
+    // Each element corresponds to a season
+    let seasonData;
+    if (Array.isArray(data)) {
+      if (season && data.length >= season) {
+        seasonData = data[season - 1]; // 0-indexed array
+      } else if (data.length > 0) {
+        seasonData = data[0]; // First season as fallback
+      }
+    } else {
+      seasonData = data;
+    }
+    
+    if (!seasonData) {
+      return { anilist: null, mal: null, kitsu: null, imdb: imdbId };
+    }
+    
+    const mappings = {
+      anilist: seasonData.anilist ? parseInt(seasonData.anilist) : null,
+      mal: seasonData.myanimelist ? parseInt(seasonData.myanimelist) : null,
+      kitsu: seasonData.kitsu ? parseInt(seasonData.kitsu) : null,
+      imdb: seasonData.imdb || imdbId
+    };
+    
+    // Cache the result
+    haglundIdCache.set(cacheKey, mappings);
+    
+    return mappings;
+  } catch (error) {
+    console.error(`[Haglund] Error fetching IMDB mappings for ${imdbId}:`, error.message);
+    return { anilist: null, mal: null, kitsu: null, imdb: imdbId };
+  }
+}
+
+// ===== ANILIST SCROBBLING API =====
+// Based on syncribullet: https://github.com/aliyss/syncribullet/blob/main/src/utils/receivers/anilist/api/sync.ts
+
+/**
+ * Get current user info from AniList
+ * @param {string} accessToken - AniList OAuth access token
+ * @returns {Promise<Object>} User info { id, name }
+ */
+async function getAnilistCurrentUser(accessToken) {
+  const query = `
+    query {
+      Viewer {
+        id
+        name
+        avatar { large medium }
+      }
+    }
+  `;
+  
+  try {
+    const response = await fetch(ANILIST_API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({ query })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`AniList API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.data?.Viewer || null;
+  } catch (error) {
+    console.error('[AniList] Error fetching current user:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get current progress for an anime on AniList
+ * @param {number} anilistId - AniList media ID
+ * @param {string} accessToken - AniList OAuth access token
+ * @returns {Promise<Object>} Current progress info
+ */
+async function getAnilistProgress(anilistId, accessToken) {
+  const query = `
+    query ($id: Int, $type: MediaType) {
+      Media(id: $id, type: $type) {
+        id
+        title { userPreferred romaji english native }
+        type
+        format
+        status(version: 2)
+        episodes
+        isAdult
+        nextAiringEpisode { airingAt timeUntilAiring episode }
+        mediaListEntry { id status score progress }
+      }
+    }
+  `;
+  
+  try {
+    const response = await fetch(ANILIST_API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        query,
+        variables: { id: anilistId, type: 'ANIME' }
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`AniList API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.data?.Media || null;
+  } catch (error) {
+    console.error('[AniList] Error fetching progress:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Update watch progress on AniList (scrobble)
+ * Based on syncribullet: https://github.com/aliyss/syncribullet/blob/main/src/utils/receivers/anilist/api/sync.ts
+ * @param {number} anilistId - AniList media ID
+ * @param {string} status - Status: CURRENT, PLANNING, COMPLETED, REPEATING, PAUSED, DROPPED
+ * @param {number} progress - Episode number watched
+ * @param {string} accessToken - AniList OAuth access token
+ * @returns {Promise<Object>} Updated entry info
+ */
+async function syncAnilistProgress(anilistId, status, progress, accessToken) {
+  // GraphQL mutation for updating anime list entry
+  // From syncribullet: https://github.com/aliyss/syncribullet/blob/main/src/utils/receivers/anilist/api/sync.ts
+  const mutation = `
+    mutation (
+      $id: Int
+      $mediaId: Int
+      $status: MediaListStatus
+      $score: Float
+      $progress: Int
+      $progressVolumes: Int
+      $repeat: Int
+      $private: Boolean
+      $notes: String
+      $customLists: [String]
+      $hiddenFromStatusLists: Boolean
+      $advancedScores: [Float]
+      $startedAt: FuzzyDateInput
+      $completedAt: FuzzyDateInput
+    ) {
+      SaveMediaListEntry(
+        id: $id
+        mediaId: $mediaId
+        status: $status
+        score: $score
+        progress: $progress
+        progressVolumes: $progressVolumes
+        repeat: $repeat
+        private: $private
+        notes: $notes
+        customLists: $customLists
+        hiddenFromStatusLists: $hiddenFromStatusLists
+        advancedScores: $advancedScores
+        startedAt: $startedAt
+        completedAt: $completedAt
+      ) {
+        id
+        mediaId
+        status
+        score
+        progress
+        updatedAt
+        user { id name }
+        media {
+          id
+          title { userPreferred }
+          type
+          format
+          status
+          episodes
+        }
+      }
+    }
+  `;
+  
+  try {
+    const response = await fetch(ANILIST_API_BASE, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: {
+          mediaId: anilistId,
+          status: status,
+          progress: progress
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`AniList API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.errors) {
+      throw new Error(`AniList GraphQL error: ${data.errors[0]?.message}`);
+    }
+    
+    console.log(`[AniList] Updated ${anilistId}: status=${status}, progress=${progress}`);
+    return data.data?.SaveMediaListEntry || null;
+  } catch (error) {
+    console.error('[AniList] Error syncing progress:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Smart scrobble to AniList - handles status transitions automatically
+ * Based on syncribullet logic: https://github.com/aliyss/syncribullet/blob/main/src/utils/receivers/anilist/recevier-server.ts
+ * @param {number} anilistId - AniList media ID
+ * @param {number} episode - Episode number watched
+ * @param {string} accessToken - AniList OAuth access token
+ * @returns {Promise<Object>} Scrobble result
+ */
+async function scrobbleToAnilist(anilistId, episode, accessToken) {
+  // First get current progress and anime info
+  const mediaInfo = await getAnilistProgress(anilistId, accessToken);
+  
+  if (!mediaInfo) {
+    throw new Error('Could not fetch anime info from AniList');
+  }
+  
+  const currentEntry = mediaInfo.mediaListEntry;
+  const totalEpisodes = mediaInfo.episodes || 9999; // Use high number for ongoing anime
+  const currentStatus = currentEntry?.status;
+  const currentProgress = currentEntry?.progress || 0;
+  
+  // Determine new status based on episode and current status
+  let newStatus = currentStatus || 'CURRENT';
+  let newProgress = episode;
+  
+  // Status transition logic from syncribullet
+  if (currentStatus === 'COMPLETED') {
+    // Already completed - don't update
+    console.log(`[AniList] Anime ${anilistId} already COMPLETED, skipping`);
+    return { skipped: true, reason: 'Already completed' };
+  }
+  
+  // If currently PAUSED, DROPPED, or PLANNING, set to CURRENT
+  if (['PAUSED', 'DROPPED', 'PLANNING'].includes(currentStatus)) {
+    newStatus = 'CURRENT';
+  }
+  
+  // If no entry exists, start watching
+  if (!currentStatus) {
+    newStatus = 'CURRENT';
+  }
+  
+  // If watched episode >= total episodes, mark as COMPLETED
+  if (episode >= totalEpisodes && mediaInfo.status === 'FINISHED') {
+    newStatus = 'COMPLETED';
+    newProgress = totalEpisodes;
+  }
+  
+  // Only update if new progress is higher than current
+  if (newProgress <= currentProgress && newStatus === currentStatus) {
+    console.log(`[AniList] Episode ${episode} <= current progress ${currentProgress}, skipping`);
+    return { skipped: true, reason: 'Episode already watched' };
+  }
+  
+  // Sync the progress
+  const result = await syncAnilistProgress(anilistId, newStatus, newProgress, accessToken);
+  
+  return {
+    success: true,
+    mediaId: anilistId,
+    title: mediaInfo.title?.userPreferred || mediaInfo.title?.romaji,
+    previousProgress: currentProgress,
+    newProgress: newProgress,
+    status: newStatus,
+    isCompleted: newStatus === 'COMPLETED'
+  };
+}
+
+// ===== MAL SCROBBLING FUNCTIONS =====
+
+/**
+ * Get current anime status from MAL
+ */
+async function getMalAnimeStatus(malId, accessToken) {
+  try {
+    const response = await fetch(`${MAL_API_BASE}/anime/${malId}?fields=id,title,num_episodes,status,my_list_status`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` }
+    });
+    
+    if (!response.ok) {
+      if (response.status === 401) return { error: 'token_expired' };
+      return null;
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('[MAL] Error fetching anime status:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Update MAL anime list status
+ */
+async function updateMalStatus(malId, status, episode, accessToken) {
+  try {
+    const params = new URLSearchParams({
+      status: status,
+      num_watched_episodes: episode.toString()
+    });
+    
+    // Add start date if starting to watch
+    if (status === 'watching') {
+      const today = new Date().toISOString().split('T')[0];
+      params.append('start_date', today);
+    }
+    
+    // Add finish date if completed
+    if (status === 'completed') {
+      const today = new Date().toISOString().split('T')[0];
+      params.append('finish_date', today);
+    }
+    
+    const response = await fetch(`${MAL_API_BASE}/anime/${malId}/my_list_status`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: params.toString()
+    });
+    
+    if (!response.ok) {
+      throw new Error(`MAL API error: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('[MAL] Error updating status:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Smart scrobble to MAL - handles status transitions automatically
+ * Based on mal-stremio-addon logic
+ */
+async function scrobbleToMal(malId, episode, accessToken, isMovie = false) {
+  // Get current anime info and status
+  const animeInfo = await getMalAnimeStatus(malId, accessToken);
+  
+  if (!animeInfo) {
+    throw new Error('Could not fetch anime info from MAL');
+  }
+  
+  if (animeInfo.error === 'token_expired') {
+    return { error: 'token_expired' };
+  }
+  
+  const listStatus = animeInfo.my_list_status;
+  const totalEpisodes = animeInfo.num_episodes || 9999;
+  const currentStatus = listStatus?.status;
+  const currentProgress = listStatus?.num_watched_episodes || 0;
+  
+  // Determine new status
+  let newStatus = currentStatus || 'watching';
+  let newProgress = episode;
+  
+  // Movies are marked as completed immediately
+  if (isMovie) {
+    newStatus = 'completed';
+    newProgress = 1;
+    const result = await updateMalStatus(malId, newStatus, newProgress, accessToken);
+    return {
+      success: true,
+      mediaId: malId,
+      title: animeInfo.title,
+      status: newStatus,
+      isCompleted: true
+    };
+  }
+  
+  // Status transition logic
+  if (currentStatus === 'completed') {
+    console.log(`[MAL] Anime ${malId} already completed, skipping`);
+    return { skipped: true, reason: 'Already completed' };
+  }
+  
+  // If on_hold, plan_to_watch, or dropped, move to watching
+  if (['on_hold', 'plan_to_watch', 'dropped'].includes(currentStatus)) {
+    newStatus = 'watching';
+  }
+  
+  // If no status, start watching
+  if (!currentStatus) {
+    newStatus = 'watching';
+  }
+  
+  // If watched episode >= total episodes and anime is finished airing, mark as completed
+  if (episode >= totalEpisodes && animeInfo.status === 'finished_airing') {
+    newStatus = 'completed';
+    newProgress = totalEpisodes;
+  }
+  
+  // Only update if new progress is higher
+  if (newProgress <= currentProgress && newStatus === currentStatus) {
+    console.log(`[MAL] Episode ${episode} <= current progress ${currentProgress}, skipping`);
+    return { skipped: true, reason: 'Episode already watched' };
+  }
+  
+  const result = await updateMalStatus(malId, newStatus, newProgress, accessToken);
+  
+  return {
+    success: true,
+    mediaId: malId,
+    title: animeInfo.title,
+    previousProgress: currentProgress,
+    newProgress: newProgress,
+    status: newStatus,
+    isCompleted: newStatus === 'completed'
+  };
+}
+
 const PAGE_SIZE = 100;
 
 // Configure page HTML (embedded for serverless deployment)
@@ -115,6 +720,12 @@ const CONFIGURE_HTML = `<!doctype html>
   .section-title{font-weight:600;font-size:18px;margin:0 0 16px;color:var(--fg)}
   .toggles-row{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   @media (max-width: 900px){ .toggles-row{grid-template-columns:1fr} }
+  label{display:block;font-weight:600;font-size:15px;margin:0 0 8px;}
+  .control{width:100%;background:var(--box);color:var(--fg);border:1px solid transparent;border-radius:16px;padding:0 16px;height:var(--ctl-h);line-height:calc(var(--ctl-h) - 2px);outline:none;}
+  .control:focus{box-shadow:0 0 0 2px rgba(57,38,166,.35);border-color:var(--primary)}
+  .control.valid{border-color:rgba(34,197,94,.5);box-shadow:0 0 0 2px rgba(34,197,94,.2)}
+  .control.invalid{border-color:rgba(239,68,68,.5);box-shadow:0 0 0 2px rgba(239,68,68,.2)}
+  select.control{appearance:none;background-image:linear-gradient(45deg,transparent 50%, var(--preview) 50%),linear-gradient(135deg, var(--preview) 50%, transparent 50%);background-position:calc(100% - 16px) 50%, calc(100% - 11px) 50%;background-size:6px 6px,6px 6px;background-repeat:no-repeat;padding-right:44px}
   .help{color:var(--muted);font-size:13px;margin-top:8px;line-height:1.45}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:18px;border:2px solid transparent;padding:14px 18px;min-width:220px;cursor:pointer;text-decoration:none;color:var(--fg);transition:transform .05s ease, box-shadow .2s ease, background .2s ease, border .2s ease;}
   .btn:active{transform:translateY(1px)}
@@ -122,6 +733,7 @@ const CONFIGURE_HTML = `<!doctype html>
   .btn-primary:hover{box-shadow:0 12px 38px rgba(57,38,166,.35);background:var(--primary-hover)}
   .btn-outline{background:transparent;border-color:var(--primary);color:var(--fg)}
   .btn-outline:hover{background:rgba(57,38,166,.08)}
+  .btn-sm{min-width:auto;padding:8px 14px;border-radius:12px;border-width:1px;height:40px}
   .toggle-box{display:flex;align-items:center;gap:12px;background:var(--box);border:1px solid transparent;border-radius:16px;padding:12px 16px;height:var(--ctl-h);cursor:pointer;user-select:none;transition:all 0.2s ease}
   .toggle-box:hover{border-color:rgba(57,38,166,.3)}
   .toggle-box input{transform:scale(1.1);accent-color:var(--primary)}
@@ -142,13 +754,27 @@ const CONFIGURE_HTML = `<!doctype html>
   .manifest-row{display:flex;align-items:center;gap:8px}
   .alt-install{margin-top:12px;font-size:13px;color:var(--muted);text-align:center}
   .alt-install a{color:var(--primary);text-decoration:underline}
-  .catalog-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-top:8px}
-  @media (max-width: 720px){ .catalog-grid{grid-template-columns:repeat(2, 1fr)} }
-  .catalog-item{display:flex;align-items:center;gap:8px;background:var(--box);border:2px solid transparent;border-radius:12px;padding:10px 14px;cursor:pointer;transition:all 0.2s ease}
-  .catalog-item:hover{border-color:rgba(57,38,166,.3)}
-  .catalog-item.hidden{opacity:0.5;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.05)}
-  .catalog-item input{accent-color:var(--primary);transform:scale(1.1)}
-  .catalog-item .name{font-weight:600;font-size:14px}
+  .pill-gap{--pill-gap:10px}
+  .pill-h{--pill-h:var(--ctl-h)}
+  .lang-controls{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center}
+  .pill-grid{display:grid;gap:10px;margin-top:10px;grid-template-columns:repeat(4, 1fr)}
+  @media (max-width: 720px){ .pill-grid{grid-template-columns:repeat(2, 1fr)} }
+  .pill{display:flex;align-items:center;background:var(--box);border:1px solid transparent;border-radius:16px;height:var(--ctl-h);padding:0 12px;width:100%;overflow:hidden}
+  .pill .txt{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill .handle{opacity:.8;cursor:pointer;font-size:16px;color:#f44336 !important;margin-left:auto;padding-left:12px;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;transition:all 0.2s ease}
+  .pill .handle:hover{background:rgba(244,67,54,0.1);transform:scale(1.1)}
+  .scrobble-row{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media (max-width: 900px){ .scrobble-row{grid-template-columns:1fr} }
+  .input-btn-row{display:flex;gap:10px;align-items:center}
+  .input-btn-row .control{flex:1}
+  .input-btn-row .btn{height:var(--ctl-h);white-space:nowrap}
+  .btn-disabled{opacity:0.6;cursor:not-allowed;pointer-events:none;background:var(--box) !important;border-color:var(--muted) !important;color:var(--muted) !important}
+  .scrobble-status{display:flex;align-items:center;gap:10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:12px;padding:8px 12px;margin-top:8px;font-size:13px}
+  .scrobble-status .icon{color:#22c55e}
+  .scrobble-status .user{font-weight:600;color:#22c55e}
+  .scrobble-status .disconnect{background:#ef4444;border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-left:auto}
+  .scrobble-status .disconnect:hover{background:#dc2626}
+  input::placeholder{color:var(--muted) !important;opacity:1}
 </style>
 </head>
 <body>
@@ -181,25 +807,38 @@ const CONFIGURE_HTML = `<!doctype html>
 
         <div>
           <div class="section-title">Hide Catalogs</div>
-          <div class="catalog-grid" id="catalogGrid">
-            <label class="catalog-item" data-key="top">
-              <input type="checkbox" checked />
-              <span class="name">Top Rated</span>
-            </label>
-            <label class="catalog-item" data-key="season">
-              <input type="checkbox" checked />
-              <span class="name">Season Releases</span>
-            </label>
-            <label class="catalog-item" data-key="airing">
-              <input type="checkbox" checked />
-              <span class="name">Currently Airing</span>
-            </label>
-            <label class="catalog-item" data-key="movies">
-              <input type="checkbox" checked />
-              <span class="name">Movies</span>
-            </label>
+          <div class="lang-controls">
+            <select id="catalogPicker" class="control">
+              <option value="">Select catalogs to hide...</option>
+              <option value="top">Top Rated</option>
+              <option value="season">Season Releases</option>
+              <option value="airing">Currently Airing</option>
+              <option value="movies">Movies</option>
+            </select>
+            <button class="btn btn-sm btn-outline" id="catalogAdd" type="button">Add</button>
+            <button class="btn btn-sm btn-outline" id="catalogClear" type="button">Clear</button>
           </div>
-          <div class="help">Uncheck catalogs to hide them from Stremio. At least one must remain visible.</div>
+          <div class="help">Hide catalogs from Stremio. At least one must remain visible.</div>
+          <div id="catalogPills" class="pill-grid"></div>
+        </div>
+
+        <div>
+          <div class="section-title">Scrobbling (Sync Watch Progress)</div>
+          <div class="help" style="margin-bottom:12px">Automatically track watched episodes. When you start an episode, it marks it as watched on your tracking account.</div>
+          
+          <div class="scrobble-row">
+            <div>
+              <label>AniList</label>
+              <button id="anilistAuthBtn" class="btn btn-sm btn-outline" type="button">Login with AniList</button>
+              <div id="anilistStatus"></div>
+            </div>
+            
+            <div>
+              <label>MyAnimeList</label>
+              <button id="malAuthBtn" class="btn btn-sm btn-outline" type="button">Login with MAL</button>
+              <div id="malStatus"></div>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -209,8 +848,8 @@ const CONFIGURE_HTML = `<!doctype html>
       </div>
 
       <div class="buttons">
-        <a id="installApp" class="btn btn-primary" style="width:100%">Install to Stremio</a>
-        <a id="installWeb" class="btn btn-outline" style="width:100%">Install to Web</a>
+        <a id="installApp" href="#" class="btn btn-primary" style="width:100%">Install to Stremio</a>
+        <a id="installWeb" href="#" class="btn btn-outline" style="width:100%">Install to Web</a>
       </div>
 
       <div class="footline">
@@ -239,7 +878,9 @@ const CONFIGURE_HTML = `<!doctype html>
   (function(){
     'use strict';
     const originHost = window.location.origin;
-    const state = { showCounts: true, excludeLongRunning: false, hiddenCatalogs: [] };
+    const state = { showCounts: true, excludeLongRunning: false, hiddenCatalogs: [], userId: '' };
+    
+    function persist() { localStorage.setItem('animestream_config', JSON.stringify(state)); }
     
     try { Object.assign(state, JSON.parse(localStorage.getItem('animestream_config') || '{}')); } catch {}
     
@@ -252,13 +893,18 @@ const CONFIGURE_HTML = `<!doctype html>
         if (key === 'showCounts') state.showCounts = value !== '0';
         if (key === 'excludeLongRunning') state.excludeLongRunning = value === '1';
         if (key === 'hc' && value) state.hiddenCatalogs = value.split(',').filter(c => ['top','season','airing','movies'].includes(c));
+        if (key === 'uid' && value) state.userId = value;
       });
+      persist();
     }
     
     const $ = sel => document.querySelector(sel);
     const showCountsEl = $('#showCounts');
     const excludeLongRunningEl = $('#excludeLongRunning');
-    const catalogGrid = $('#catalogGrid');
+    const catalogPicker = $('#catalogPicker');
+    const catalogAddBtn = $('#catalogAdd');
+    const catalogClearBtn = $('#catalogClear');
+    const catalogPillsEl = $('#catalogPills');
     const manifestEl = $('#manifestUrl');
     const appBtn = $('#installApp');
     const webBtn = $('#installWeb');
@@ -266,20 +912,12 @@ const CONFIGURE_HTML = `<!doctype html>
     const copyBtn = $('#copyBtn');
     const altInstallLink = $('#altInstallLink');
     const toast = $('#toast');
+    const anilistStatusEl = $('#anilistStatus');
+    
+    const CATALOG_NAMES = { top: 'Top Rated', season: 'Season Releases', airing: 'Currently Airing', movies: 'Movies' };
     
     showCountsEl.checked = state.showCounts !== false;
     excludeLongRunningEl.checked = state.excludeLongRunning === true;
-    
-    // Initialize catalog checkboxes
-    catalogGrid.querySelectorAll('.catalog-item').forEach(item => {
-      const key = item.dataset.key;
-      const checkbox = item.querySelector('input');
-      const isHidden = state.hiddenCatalogs.includes(key);
-      checkbox.checked = !isHidden;
-      if (isHidden) item.classList.add('hidden');
-    });
-    
-    function persist() { localStorage.setItem('animestream_config', JSON.stringify(state)); }
     
     function showToast(msg, isError) {
       toast.textContent = msg;
@@ -297,37 +935,59 @@ const CONFIGURE_HTML = `<!doctype html>
       } catch { statsEl.innerHTML = '<span class="stat">7,000+ anime</span>'; }
     }
     
+    // ===== CATALOG BLACKLIST =====
+    function renderCatalogPills() {
+      catalogPillsEl.innerHTML = state.hiddenCatalogs.map(key => 
+        '<div class="pill" data-key="' + key + '"><span class="txt">' + (CATALOG_NAMES[key] || key) + '</span><span class="handle" title="Remove">✕</span></div>'
+      ).join('');
+      
+      // Update dropdown - hide already selected items
+      Array.from(catalogPicker.options).forEach(opt => {
+        if (opt.value) opt.disabled = state.hiddenCatalogs.includes(opt.value);
+      });
+      catalogPicker.value = '';
+      
+      // Attach remove handlers
+      catalogPillsEl.querySelectorAll('.handle').forEach(handle => {
+        handle.onclick = () => {
+          const key = handle.parentElement.dataset.key;
+          state.hiddenCatalogs = state.hiddenCatalogs.filter(c => c !== key);
+          persist();
+          renderCatalogPills();
+          rerender();
+        };
+      });
+    }
+    
+    catalogAddBtn.onclick = () => {
+      const val = catalogPicker.value;
+      if (!val) return;
+      
+      // Ensure at least 1 catalog remains visible
+      if (state.hiddenCatalogs.length >= 3) {
+        showToast('At least one catalog must remain visible', true);
+        return;
+      }
+      
+      if (!state.hiddenCatalogs.includes(val)) {
+        state.hiddenCatalogs.push(val);
+        persist();
+        renderCatalogPills();
+        rerender();
+      }
+    };
+    
+    catalogClearBtn.onclick = () => {
+      state.hiddenCatalogs = [];
+      persist();
+      renderCatalogPills();
+      rerender();
+    };
+    
+    renderCatalogPills();
+    
     showCountsEl.onchange = () => { state.showCounts = showCountsEl.checked; persist(); rerender(); };
     excludeLongRunningEl.onchange = () => { state.excludeLongRunning = excludeLongRunningEl.checked; persist(); rerender(); };
-    
-    // Catalog checkbox handlers
-    catalogGrid.querySelectorAll('.catalog-item').forEach(item => {
-      const checkbox = item.querySelector('input');
-      checkbox.addEventListener('change', () => {
-        const key = item.dataset.key;
-        // Count currently visible catalogs
-        const visibleCount = 4 - state.hiddenCatalogs.length;
-        
-        if (!checkbox.checked) {
-          // Trying to hide - ensure at least 1 remains visible
-          if (visibleCount <= 1) {
-            checkbox.checked = true;
-            showToast('At least one catalog must remain visible', true);
-            return;
-          }
-          if (!state.hiddenCatalogs.includes(key)) {
-            state.hiddenCatalogs.push(key);
-          }
-          item.classList.add('hidden');
-        } else {
-          // Unhiding
-          state.hiddenCatalogs = state.hiddenCatalogs.filter(c => c !== key);
-          item.classList.remove('hidden');
-        }
-        persist();
-        rerender();
-      });
-    });
     
     function wireToggle(boxId, inputEl) {
       const box = document.getElementById(boxId);
@@ -338,11 +998,274 @@ const CONFIGURE_HTML = `<!doctype html>
     wireToggle('toggleShowCounts', showCountsEl);
     wireToggle('toggleExcludeLongRunning', excludeLongRunningEl);
     
+    // ===== ANILIST SCROBBLING =====
+    const ANILIST_CLIENT_ID = '34748'; // Hardcoded - users don't need to create apps
+    const anilistAuthBtn = $('#anilistAuthBtn');
+    // anilistStatusEl already declared above
+    let anilistToken = localStorage.getItem('animestream_anilist_token') || '';
+    let anilistUser = null;
+    let anilistUserId = null;
+    
+    function renderAnilistStatus() {
+      if (anilistUser && anilistToken) {
+        anilistStatusEl.innerHTML = '<div class="scrobble-status">' +
+          '<span class="icon">✓</span>' +
+          '<span>Connected as <span class="user">' + anilistUser + '</span></span>' +
+          '<button class="disconnect" id="anilistDisconnect">Disconnect</button></div>';
+        
+        $('#anilistDisconnect').onclick = async () => {
+          // Clear server-side tokens if we have a user ID
+          if (state.userId) {
+            try { await fetch('/api/user/' + state.userId + '/disconnect', { method: 'POST', body: JSON.stringify({ service: 'anilist' }) }); } catch {}
+          }
+          localStorage.removeItem('animestream_anilist_token');
+          anilistToken = '';
+          anilistUser = null;
+          anilistUserId = null;
+          renderAnilistStatus();
+          rerender();
+          showToast('AniList disconnected');
+        };
+        anilistAuthBtn.style.display = 'none';
+      } else {
+        anilistStatusEl.innerHTML = '';
+        anilistAuthBtn.style.display = '';
+      }
+    }
+    
+    // Check existing token validity and save to server
+    async function checkAnilistConnection() {
+      if (!anilistToken) {
+        renderAnilistStatus();
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/anilist/user', {
+          headers: { 'Authorization': 'Bearer ' + anilistToken }
+        });
+        const data = await res.json();
+        if (data.user && data.user.name) {
+          anilistUser = data.user.name;
+          anilistUserId = data.user.id;
+          
+          // Generate user ID if not exists and save tokens to server
+          if (!state.userId && anilistUserId) {
+            state.userId = 'al_' + anilistUserId;
+            persist();
+          }
+          
+          // Save tokens to server for scrobbling
+          await saveTokensToServer();
+        } else {
+          localStorage.removeItem('animestream_anilist_token');
+          anilistToken = '';
+        }
+      } catch {}
+      renderAnilistStatus();
+      rerender();
+    }
+    
+    // Save tokens to server (KV storage)
+    async function saveTokensToServer() {
+      if (!state.userId) return;
+      
+      const tokens = {};
+      if (anilistToken) tokens.anilistToken = anilistToken;
+      if (anilistUserId) tokens.anilistUserId = anilistUserId;
+      if (anilistUser) tokens.anilistUser = anilistUser;
+      if (malToken) tokens.malToken = malToken;
+      if (malUser) tokens.malUser = malUser;
+      
+      try {
+        await fetch('/api/user/' + state.userId + '/tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tokens)
+        });
+      } catch (err) {
+        console.error('Failed to save tokens:', err);
+      }
+    }
+    
+    function startAnilistAuth() {
+      // Redirect to AniList OAuth - will redirect back with token in URL hash
+      const authUrl = 'https://anilist.co/api/v2/oauth/authorize?client_id=' + ANILIST_CLIENT_ID + '&response_type=token';
+      window.location.href = authUrl;
+    }
+    
+    anilistAuthBtn.onclick = startAnilistAuth;
+    
+    // Handle OAuth token from URL hash (after redirect back)
+    function checkUrlForAnilistToken() {
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token=')) {
+        const match = hash.match(/access_token=([^&]+)/);
+        if (match && match[1]) {
+          const token = match[1];
+          localStorage.setItem('animestream_anilist_token', token);
+          anilistToken = token;
+          // Clear the hash from URL
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+          showToast('AniList connected! Syncing tokens...');
+          checkAnilistConnection();
+        }
+      }
+    }
+    
+    // ===== MYANIMELIST SCROBBLING =====
+    const MAL_CLIENT_ID = 'e1c53f5d91d73133d628b7e2f56df992';
+    const malAuthBtn = $('#malAuthBtn');
+    const malStatusEl = $('#malStatus');
+    let malToken = localStorage.getItem('animestream_mal_token') || '';
+    let malUser = null;
+    let malUserId = null;
+    
+    function renderMalStatus() {
+      if (malUser && malToken) {
+        malStatusEl.innerHTML = '<div class="scrobble-status">' +
+          '<span class="icon">✓</span>' +
+          '<span>Connected as <span class="user">' + malUser + '</span></span>' +
+          '<button class="disconnect" id="malDisconnect">Disconnect</button></div>';
+        
+        $('#malDisconnect').onclick = async () => {
+          // Clear server-side tokens if we have a user ID
+          if (state.userId) {
+            try { await fetch('/api/user/' + state.userId + '/disconnect', { method: 'POST', body: JSON.stringify({ service: 'mal' }) }); } catch {}
+          }
+          localStorage.removeItem('animestream_mal_token');
+          localStorage.removeItem('animestream_mal_code_verifier');
+          malToken = '';
+          malUser = null;
+          malUserId = null;
+          renderMalStatus();
+          rerender();
+          showToast('MyAnimeList disconnected');
+        };
+        malAuthBtn.style.display = 'none';
+      } else {
+        malStatusEl.innerHTML = '';
+        malAuthBtn.style.display = '';
+      }
+    }
+    
+    // MAL uses PKCE OAuth2 flow
+    function generateCodeVerifier() {
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      return btoa(String.fromCharCode.apply(null, array)).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+    }
+    
+    async function generateCodeChallenge(verifier) {
+      // MAL uses plain code challenge (code_challenge = code_verifier)
+      return verifier;
+    }
+    
+    function startMalAuth() {
+      const codeVerifier = generateCodeVerifier();
+      localStorage.setItem('animestream_mal_code_verifier', codeVerifier);
+      
+      const authUrl = 'https://myanimelist.net/v1/oauth2/authorize?' +
+        'response_type=code&' +
+        'client_id=' + MAL_CLIENT_ID + '&' +
+        'code_challenge=' + codeVerifier + '&' +
+        'code_challenge_method=plain&' +
+        'redirect_uri=' + encodeURIComponent(window.location.origin + '/mal/callback');
+      
+      window.location.href = authUrl;
+    }
+    
+    malAuthBtn.onclick = startMalAuth;
+    
+    // Check for MAL OAuth code in URL (after redirect)
+    async function checkUrlForMalCode() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const isMalCallback = params.get('mal_callback') === '1';
+      
+      if (code && isMalCallback) {
+        const codeVerifier = localStorage.getItem('animestream_mal_code_verifier');
+        if (!codeVerifier) {
+          showToast('MAL auth failed: missing code verifier', true);
+          // Clean up URL
+          history.replaceState(null, '', '/configure');
+          return;
+        }
+        
+        try {
+          // Exchange code for token via our API endpoint
+          const res = await fetch('/api/mal/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, codeVerifier, redirectUri: window.location.origin + '/mal/callback' })
+          });
+          const data = await res.json();
+          
+          if (data.access_token) {
+            localStorage.setItem('animestream_mal_token', data.access_token);
+            malToken = data.access_token;
+            localStorage.removeItem('animestream_mal_code_verifier');
+            showToast('MyAnimeList connected successfully!');
+            // Clean up URL
+            history.replaceState(null, '', '/configure');
+            checkMalConnection();
+            return;
+          } else {
+            showToast('MAL auth failed: ' + (data.error || 'unknown error'), true);
+          }
+        } catch (err) {
+          showToast('MAL auth failed: ' + err.message, true);
+        }
+        // Clean up URL on error too
+        history.replaceState(null, '', '/configure');
+      }
+    }
+    
+    async function checkMalConnection() {
+      if (!malToken) {
+        renderMalStatus();
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/mal/user', {
+          headers: { 'Authorization': 'Bearer ' + malToken }
+        });
+        const data = await res.json();
+        if (data.user && data.user.name) {
+          malUser = data.user.name;
+          malUserId = data.user.id;
+          
+          // Generate user ID if not exists (prefer AniList ID if available)
+          if (!state.userId && malUserId) {
+            state.userId = 'mal_' + malUserId;
+            persist();
+          }
+          
+          // Save tokens to server for scrobbling
+          await saveTokensToServer();
+        } else {
+          localStorage.removeItem('animestream_mal_token');
+          malToken = '';
+        }
+      } catch {}
+      renderMalStatus();
+      rerender();
+    }
+    
+    // Initialize - check for OAuth tokens in URL first
+    checkUrlForMalCode();
+    checkUrlForAnilistToken();
+    checkAnilistConnection();
+    checkMalConnection();
+    
     function buildConfigPath() {
       const parts = [];
       if (!state.showCounts) parts.push('showCounts=0');
       if (state.excludeLongRunning) parts.push('excludeLongRunning=1');
       if (state.hiddenCatalogs.length > 0) parts.push('hc=' + state.hiddenCatalogs.join(','));
+      // Include user ID for scrobbling (tokens stored server-side in KV)
+      if (state.userId) parts.push('uid=' + state.userId);
       return parts.join('&');
     }
     
@@ -497,6 +1420,243 @@ function stripHtml(html) {
   return html.replace(/<[^>]*>/g, '').trim();
 }
 
+/**
+ * Convert Stremio season:episode to AllAnime absolute episode number
+ * 
+ * Cinemeta/IMDB splits long-running anime into seasons based on arcs,
+ * but AllAnime uses continuous episode numbering (e.g., One Piece has 1150+ episodes as season 1)
+ * 
+ * This mapping converts Stremio's S22E68 format to AllAnime's absolute E1153 format
+ */
+const EPISODE_SEASON_MAPPINGS = {
+  // ===========================================
+  // ONE PIECE (tt0388629) - 1150+ episodes
+  // VERIFIED mapping from Cinemeta seasons to AllAnime absolute episodes
+  // S21E1 = "The Land of Wano!" = Episode 892
+  // S22E1 = "A New Emperor! Buggy" = Episode 1086
+  // ===========================================
+  'tt0388629': {
+    seasons: [
+      { season: 1, start: 1, end: 8 },         // Romance Dawn
+      { season: 2, start: 9, end: 30 },        // Orange Town/Syrup Village
+      { season: 3, start: 31, end: 47 },       // Baratie/Arlong Park
+      { season: 4, start: 48, end: 60 },       // Arlong Park cont./Loguetown
+      { season: 5, start: 61, end: 69 },       // Reverse Mountain/Whisky Peak
+      { season: 6, start: 70, end: 91 },       // Little Garden/Drum Island
+      { season: 7, start: 92, end: 130 },      // Alabasta
+      { season: 8, start: 131, end: 143 },     // Post-Alabasta
+      { season: 9, start: 144, end: 195 },     // Skypiea
+      { season: 10, start: 196, end: 226 },    // Long Ring Long Land/G-8
+      { season: 11, start: 227, end: 325 },    // Water 7/Enies Lobby
+      { season: 12, start: 326, end: 381 },    // Thriller Bark
+      { season: 13, start: 382, end: 481 },    // Sabaody/Impel Down
+      { season: 14, start: 482, end: 516 },    // Marineford
+      { season: 15, start: 517, end: 578 },    // Post-War
+      { season: 16, start: 579, end: 627 },    // Fishman Island
+      { season: 17, start: 628, end: 745 },    // Punk Hazard/Dressrosa
+      { season: 18, start: 746, end: 778 },    // Zou
+      { season: 19, start: 779, end: 877 },    // Whole Cake Island
+      { season: 20, start: 878, end: 891 },    // Reverie
+      { season: 21, start: 892, end: 1085 },   // Wano Country (VERIFIED: S21E1 = Ep 892)
+      { season: 22, start: 1086, end: 1155 },  // Egghead (VERIFIED: S22E1 = Ep 1086)
+      { season: 23, start: 1156, end: 9999 },  // Current arc (ongoing)
+    ],
+    totalSeasons: 23
+  },
+
+  // ===========================================
+  // DRAGON BALL Z (tt0214341) - 291 episodes
+  // Cinemeta: S1:39, S2:35, S3:33, S4:32, S5:26, S6:29, S7:25, S8:34, S9:38
+  // ===========================================
+  'tt0214341': {
+    seasons: [
+      { season: 1, start: 1, end: 39 },      // Saiyan Saga
+      { season: 2, start: 40, end: 74 },     // Namek Saga
+      { season: 3, start: 75, end: 107 },    // Captain Ginyu Saga
+      { season: 4, start: 108, end: 139 },   // Frieza Saga
+      { season: 5, start: 140, end: 165 },   // Garlic Jr. Saga
+      { season: 6, start: 166, end: 194 },   // Trunks/Android Saga
+      { season: 7, start: 195, end: 219 },   // Imperfect Cell Saga
+      { season: 8, start: 220, end: 253 },   // Cell Games Saga
+      { season: 9, start: 254, end: 291 },   // Buu Saga
+    ],
+    totalSeasons: 9
+  },
+
+  // ===========================================
+  // NARUTO (tt0409591) - 220 episodes
+  // Cinemeta: S1:35, S2:48, S3:48, S4:48, S5:41
+  // ===========================================
+  'tt0409591': {
+    seasons: [
+      { season: 1, start: 1, end: 35 },      // Land of Waves/Chunin Exam
+      { season: 2, start: 36, end: 83 },     // Chunin Exam Finals
+      { season: 3, start: 84, end: 131 },    // Tsunade Search/Sasuke Retrieval
+      { season: 4, start: 132, end: 179 },   // Filler arcs
+      { season: 5, start: 180, end: 220 },   // Filler arcs/Final
+    ],
+    totalSeasons: 5
+  },
+
+  // ===========================================
+  // NARUTO SHIPPUDEN (tt0988824) - 500 episodes
+  // Cinemeta uses 22 seasons with varying episode counts
+  // ===========================================
+  'tt0988824': {
+    seasons: [
+      { season: 1, start: 1, end: 32 },
+      { season: 2, start: 33, end: 53 },
+      { season: 3, start: 54, end: 71 },
+      { season: 4, start: 72, end: 88 },
+      { season: 5, start: 89, end: 112 },
+      { season: 6, start: 113, end: 143 },
+      { season: 7, start: 144, end: 151 },
+      { season: 8, start: 152, end: 175 },
+      { season: 9, start: 176, end: 196 },
+      { season: 10, start: 197, end: 222 },
+      { season: 11, start: 223, end: 242 },
+      { season: 12, start: 243, end: 260 },
+      { season: 13, start: 261, end: 295 },
+      { season: 14, start: 296, end: 320 },
+      { season: 15, start: 321, end: 348 },
+      { season: 16, start: 349, end: 361 },
+      { season: 17, start: 362, end: 393 },
+      { season: 18, start: 394, end: 413 },
+      { season: 19, start: 414, end: 431 },
+      { season: 20, start: 432, end: 450 },
+      { season: 21, start: 451, end: 458 },
+      { season: 22, start: 459, end: 500 },
+    ],
+    totalSeasons: 22
+  },
+
+  // ===========================================
+  // BLEACH (tt0434665) - 366 + TYBW episodes
+  // Cinemeta uses 16 seasons for original + TYBW
+  // ===========================================
+  'tt0434665': {
+    seasons: [
+      { season: 1, start: 1, end: 20 },      // Agent of Shinigami
+      { season: 2, start: 21, end: 41 },     // Soul Society: Entry
+      { season: 3, start: 42, end: 63 },     // Soul Society: Rescue
+      { season: 4, start: 64, end: 91 },     // Bount arc (filler)
+      { season: 5, start: 92, end: 109 },    // Assault on Hueco Mundo
+      { season: 6, start: 110, end: 131 },   // Arrancar arc
+      { season: 7, start: 132, end: 151 },   // Arrancar vs Shinigami
+      { season: 8, start: 152, end: 167 },   // Past arc
+      { season: 9, start: 168, end: 189 },   // Hueco Mundo arc
+      { season: 10, start: 190, end: 205 },  // Arrancar Battle
+      { season: 11, start: 206, end: 212 },  // Past arc 2
+      { season: 12, start: 213, end: 229 },  // Fake Karakura Town
+      { season: 13, start: 230, end: 265 },  // Zanpakuto arc (filler)
+      { season: 14, start: 266, end: 316 },  // Arrancar Finale
+      { season: 15, start: 317, end: 342 },  // Gotei 13 Invasion
+      { season: 16, start: 343, end: 366 },  // Fullbring arc
+      // TYBW continues as season 17+ in Cinemeta
+      { season: 17, start: 367, end: 390 },  // Thousand-Year Blood War Part 1
+      { season: 18, start: 391, end: 9999 }, // TYBW continuation
+    ],
+    totalSeasons: 18
+  },
+
+  // ===========================================
+  // FAIRY TAIL (tt1528406) - 328 episodes
+  // Cinemeta: S1:48, S2:48, S3:54, S4:25, S5:51, S6:39, S7:12, S8:51
+  // ===========================================
+  'tt1528406': {
+    seasons: [
+      { season: 1, start: 1, end: 48 },      // Macao/Daybreak/Lullaby
+      { season: 2, start: 49, end: 96 },     // Phantom Lord/Tower of Heaven
+      { season: 3, start: 97, end: 150 },    // Battle of Fairy Tail/Oración Seis
+      { season: 4, start: 151, end: 175 },   // Edolas arc
+      { season: 5, start: 176, end: 226 },   // Tenrou Island/X791
+      { season: 6, start: 227, end: 265 },   // Grand Magic Games
+      { season: 7, start: 266, end: 277 },   // Eclipse/Sun Village
+      { season: 8, start: 278, end: 328 },   // Tartaros/Avatar/Alvarez
+    ],
+    totalSeasons: 8
+  },
+
+  // ===========================================
+  // HUNTER X HUNTER 2011 (tt2098220) - 148 episodes
+  // Cinemeta: S1:58, S2:78, S3:12
+  // ===========================================
+  'tt2098220': {
+    seasons: [
+      { season: 1, start: 1, end: 58 },      // Hunter Exam/Heavens Arena/Yorknew
+      { season: 2, start: 59, end: 136 },    // Greed Island/Chimera Ant
+      { season: 3, start: 137, end: 148 },   // Election arc
+    ],
+    totalSeasons: 3
+  },
+
+  // ===========================================
+  // DRAGON BALL SUPER (tt4644488) - 131 episodes
+  // Cinemeta: S1:14, S2:13, S3:19, S4:30, S5:55
+  // ===========================================
+  'tt4644488': {
+    seasons: [
+      { season: 1, start: 1, end: 14 },      // God of Destruction Beerus
+      { season: 2, start: 15, end: 27 },     // Golden Frieza
+      { season: 3, start: 28, end: 46 },     // Universe 6
+      { season: 4, start: 47, end: 76 },     // Future Trunks
+      { season: 5, start: 77, end: 131 },    // Tournament of Power
+    ],
+    totalSeasons: 5
+  },
+
+  // ===========================================
+  // DETECTIVE CONAN / CASE CLOSED (tt0131179)
+  // 1100+ episodes - Cinemeta uses continuous numbering
+  // ===========================================
+  'tt0131179': {
+    seasons: [
+      { season: 1, start: 1, end: 999999 }  // Treat as continuous
+    ],
+    totalSeasons: 1
+  },
+
+  // ===========================================
+  // BORUTO (tt6342474) - 293 episodes
+  // Cinemeta uses single season
+  // ===========================================
+  'tt6342474': {
+    seasons: [
+      { season: 1, start: 1, end: 293 }
+    ],
+    totalSeasons: 1
+  },
+};
+
+function convertToAbsoluteEpisode(imdbId, season, episode) {
+  const mapping = EPISODE_SEASON_MAPPINGS[imdbId];
+  
+  if (!mapping) {
+    // No special mapping needed - return episode as-is
+    // For most anime, Stremio uses season 1 with continuous episodes
+    return episode;
+  }
+  
+  // Find the season mapping
+  const seasonData = mapping.seasons.find(s => s.season === season);
+  
+  if (!seasonData) {
+    console.log(`No season mapping for ${imdbId} S${season}, using episode ${episode} as-is`);
+    return episode;
+  }
+  
+  // Calculate absolute episode: season_start + (episode - 1)
+  const absoluteEpisode = seasonData.start + (episode - 1);
+  
+  // Validate it's within the season range
+  if (absoluteEpisode > seasonData.end) {
+    console.log(`Episode ${episode} exceeds season ${season} range (max: ${seasonData.end - seasonData.start + 1}), capping to ${seasonData.end}`);
+    return seasonData.end;
+  }
+  
+  return absoluteEpisode;
+}
+
 // Check if URL is a direct video stream
 function isDirectStream(url) {
   if (/\.(mp4|m3u8|mkv|webm)(\?|$)/i.test(url)) return true;
@@ -520,7 +1680,7 @@ async function searchAllAnime(searchQuery, limit = 10) {
   const query = `
     query ($search: SearchInput!, $limit: Int, $page: Int, $translationType: VaildTranslationTypeEnumType, $countryOrigin: VaildCountryOriginEnumType) {
       shows(search: $search, limit: $limit, page: $page, translationType: $translationType, countryOrigin: $countryOrigin) {
-        edges { _id name englishName nativeName type score status episodeCount }
+        edges { _id name englishName nativeName type score status episodeCount malId aniListId }
       }
     }
   `;
@@ -552,6 +1712,8 @@ async function searchAllAnime(searchQuery, limit = 10) {
       nativeTitle: show.nativeName,
       type: show.type,
       score: show.score,
+      malId: show.malId ? parseInt(show.malId) : null,
+      aniListId: show.aniListId ? parseInt(show.aniListId) : null,
     }));
     
     // Cache the results
@@ -717,6 +1879,110 @@ async function fetchCinemetaMeta(imdbId, type = 'series') {
 }
 
 /**
+ * Fetch anime title from AniList API using MAL ID
+ * This is a fallback when Cinemeta doesn't have the anime
+ * @param {number} malId - MyAnimeList ID
+ * @returns {Promise<Object|null>} Anime info with title or null
+ */
+async function fetchAniListByMalId(malId) {
+  try {
+    const query = `
+      query ($malId: Int) {
+        Media(idMal: $malId, type: ANIME) {
+          id
+          idMal
+          title { romaji english native }
+          description
+          coverImage { large }
+        }
+      }
+    `;
+    
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ query, variables: { malId: parseInt(malId) } })
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data?.data?.Media) return null;
+    
+    const media = data.data.Media;
+    return {
+      id: `mal-${media.idMal}`,
+      name: media.title.english || media.title.romaji || media.title.native,
+      mal_id: media.idMal,
+      anilist_id: media.id,
+      description: media.description,
+      poster: media.coverImage?.large,
+      _source: 'anilist'
+    };
+  } catch (e) {
+    console.error('AniList fetch error:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Search AniList API by title to get MAL/AniList IDs
+ * This is used when we only have a title but no IDs
+ * @param {string} title - Anime title to search
+ * @returns {Promise<Object|null>} Anime info or null
+ */
+async function searchAniListByTitle(title) {
+  try {
+    const query = `
+      query ($search: String) {
+        Page(page: 1, perPage: 5) {
+          media(search: $search, type: ANIME) {
+            id
+            idMal
+            title { romaji english native }
+            description
+            coverImage { large }
+          }
+        }
+      }
+    `;
+    
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ query, variables: { search: title } })
+    });
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const results = data?.data?.Page?.media;
+    if (!results || results.length === 0) return null;
+    
+    // Return first result (best match)
+    const media = results[0];
+    return {
+      id: `mal-${media.idMal}`,
+      name: media.title.english || media.title.romaji || media.title.native,
+      mal_id: media.idMal,
+      anilist_id: media.id,
+      description: media.description,
+      poster: media.coverImage?.large,
+      _source: 'anilist'
+    };
+  } catch (e) {
+    console.error('AniList search error:', e.message);
+    return null;
+  }
+}
+
+/**
  * Check if metadata is poor/incomplete and needs enrichment
  */
 function isMetadataIncomplete(meta) {
@@ -736,12 +2002,12 @@ async function fetchCatalogData() {
   }
   
   try {
-    // Fetch both files in parallel
+    // Fetch both files in parallel (use cache buster to force refresh after updates)
     const [catalogRes, filterRes] = await Promise.all([
-      fetch(`${GITHUB_RAW_BASE}/catalog.json`, {
+      fetch(`${GITHUB_RAW_BASE}/catalog.json?v=${CACHE_BUSTER}`, {
         cf: { cacheTtl: CACHE_TTL, cacheEverything: true }
       }),
-      fetch(`${GITHUB_RAW_BASE}/filter-options.json`, {
+      fetch(`${GITHUB_RAW_BASE}/filter-options.json?v=${CACHE_BUSTER}`, {
         cf: { cacheTtl: CACHE_TTL, cacheEverything: true }
       })
     ]);
@@ -755,6 +2021,8 @@ async function fetchCatalogData() {
     catalogCache = catalogData.catalog || catalogData;
     filterOptionsCache = await filterRes.json();
     cacheTimestamp = now;
+    
+    console.log(`[loadCatalogData] Loaded ${catalogCache.length} entries from GitHub (version: ${catalogData.version || 'unknown'})`);
     
     return { catalog: catalogCache, filterOptions: filterOptionsCache };
   } catch (error) {
@@ -915,6 +2183,11 @@ const NON_ANIME_BLACKLIST = new Set([
   // Western Animation
   'tt15248880', // Adventure Time: Fionna & Cake
   'tt1305826',  // Adventure Time
+  'tt4501334',  // Adventure Time (duplicate)
+  'tt11165358', // Adventure Time: Distant Lands
+  'tt5161450',  // Adventure Time: The Wand
+  'tt0373732',  // The Boondocks
+  'tt0278238',  // Samurai Jack
   'tt11126994', // Arcane
   'tt8050756',  // The Owl House
   'tt12895414', // The SpongeBob SquarePants Anime
@@ -941,6 +2214,93 @@ const NON_ANIME_BLACKLIST = new Set([
   'tt32915621', // Valoran Town (LoL, Chinese)
   'tt28786861', // Justice League x RWBY Part 2 (DC/Rooster Teeth)
   'tt4717402',  // MFKZ (French production)
+  'tt0343314',  // Teen Titans (US, Warner Bros. Animation)
+  'tt2218106',  // Teen Titans Go! (US, Warner Bros. Animation)
+  'tt2098999',  // Amphibia (Disney)
+  'mal-45749',  // Amphibia Season Three (Disney)
+  'tt6517102',  // Castlevania (Netflix, US production)
+  'tt14833612', // Castlevania: Nocturne (Netflix, US)
+  'tt11680642', // Pantheon (AMC, US production)
+  'tt21056886', // Scavengers Reign (Max, US production)
+  'tt9288848',  // Pacific Rim: The Black (Netflix, Polygon Pictures but US IP)
+  
+  // Avatar: The Last Airbender (US production, Nickelodeon)
+  'mal-7926',   // Avatar: The Last Airbender Book 3: Fire
+  'mal-7937',   // Avatar: The Last Airbender Book 2: Earth
+  'mal-7936',   // Avatar: The Last Airbender Book 1: Water
+  'mal-11839',  // Avatar: The Legend So Far
+  'mal-11842',  // Avatar Pilot
+  
+  // Legend of Korra (US production, Nickelodeon)
+  'mal-7927',   // The Legend of Korra Book 1: Air
+  'mal-7938',   // The Legend of Korra Book 2: Spirits
+  'mal-8077',   // The Legend of Korra Book 3: Change
+  'mal-8706',   // The Legend of Korra Book 4: Balance
+  'mal-11565',  // The Re-telling of Korra's Journey
+  
+  // DOTA: Dragon's Blood (Studio Mir, Korean/US)
+  'mal-44413',  // DOTA: Dragon's Blood Book II
+  'mal-46257',  // DOTA: Dragon's Blood: Book III
+  
+  // RWBY (Rooster Teeth, US production)
+  'tt3066242',  // RWBY
+  'tt21198914', // RWBY (duplicate IMDB)
+  'tt35253928', // RWBY II World of Remnant
+  'tt5660680',  // RWBY: Chibi
+  'tt19389868', // RWBY: Ice Queendom
+  'tt28695882', // RWBY Volume 9: Beyond
+  'mal-11013',  // RWBY Prologue Trailers
+  'mal-12629',  // RWBY IV Character Short
+  'mal-8707',   // RWBY II World of Remnant
+  'mal-13649',  // RWBY V: Character Shorts
+  'mal-11439',  // RWBY III World of Remnant
+  'mal-13248',  // RWBY Chibi 2
+  'mal-12669',  // RWBY IV World of Remnant
+  'mal-14240',  // RWBY Chibi 3
+  'mal-41936',  // RWBY VI: Character Short
+  'mal-12674',  // RWBY: The Story So Far
+  'mal-47335',  // RWBY Vol. X
+  'tt24548912', // Justice League x RWBY Part 1
+  'mal-48814',  // RWBY Volume 9: Bonus Ending Animatic
+  'mal-48799',  // RWBY Volume 9: Beyond
+  
+  // Adventure Time (Cartoon Network, US)
+  'mal-13768',  // Adventure Time Season 8
+  'mal-41118',  // Adventure Time Season 10
+  'mal-13766',  // Adventure Time Season 6
+  'mal-13767',  // Adventure Time Season 7
+  'mal-13770',  // Adventure Time: Graybles Allsorts
+  'mal-13771',  // Adventure Time Short: Frog Seasons
+  
+  // Steven Universe (Cartoon Network, US)
+  'mal-11215',  // Steven Universe Season 2 Specials
+  'mal-11100',  // Steven Universe Pilot
+  'mal-13424',  // Steven Universe Season 4 Specials
+  
+  // Star vs. the Forces of Evil (Disney, US)
+  'tt2758770',  // Star vs. the Forces of Evil
+  'mal-13533',  // Star vs. The Forces of Evil: The Battle for Mewni
+  
+  // Teen Titans (US, Warner Bros.)
+  'mal-11483',  // Teen Titans: The Lost Episode
+  'tt10548944', // Teen Titans Go! vs. Teen Titans
+  
+  // Voltron (US production)
+  'tt1669774',  // Voltron Force
+  'tt0164303',  // Voltron: The Third Dimension
+  
+  // The Dragon Prince (US, Wonderstorm)
+  'tt8688814',  // The Dragon Prince
+  
+  // Gen:Lock (Rooster Teeth, US)
+  'mal-42560',  // Gen:Lock Character Reveal Teasers
+  
+  // Gravity Falls (Disney, US)
+  'mal-47514',  // Gravity Falls Pilot
+  
+  // Amphibia (Disney, US)
+  'mal-45754',  // Disney Theme Song Takeover-Amphibia
+  'tt20190086', // Amphibia Chibi Tiny Tales
   
   // Donghua (Chinese Animation) - not Japanese anime
   'tt11755260', // The Daily Life of the Immortal King
@@ -960,323 +2320,226 @@ const NON_ANIME_BLACKLIST = new Set([
 ]);
 
 // Manual poster overrides for anime with broken/missing metahub posters
+// V5 cleanup: Removed items NOT IN CATALOG or with good Fribb/IMDB matches
 const POSTER_OVERRIDES = {
-  'tt38691315': 'https://media.kitsu.app/anime/50202/poster_image/large-b0a51e52146b1d81d8d0924b5a8bbe82.jpeg', // Style of Hiroshi Nohara Lunch
-  'tt35348212': 'https://media.kitsu.app/anime/49843/poster_image/large-805a2f6fe1d62a8f6221dd07c7bce005.jpeg', // Kaijuu Sekai Seifuku (TV)
+  'tt38691315': 'https://media.kitsu.app/anime/50202/poster_image/large-b0a51e52146b1d81d8d0924b5a8bbe82.jpeg', // Style of Hiroshi Nohara Lunch - imdb_v5_medium
   'tt12787182': 'https://media.kitsu.app/anime/poster_images/43256/large.jpg', // Fushigi Dagashiya: Zenitendou
   'tt1978960': 'https://media.kitsu.app/anime/poster_images/5007/large.jpg', // Knyacki!
   'tt37776400': 'https://media.kitsu.app/anime/50096/poster_image/large-9ca5e6ff11832a8bf554697c1f183dbf.jpeg', // Dungeons & Television
-  'tt37578217': 'https://media.kitsu.app/anime/poster_images/43617/large.jpg', // Ling Cage
-  'tt37894464': 'https://media.kitsu.app/anime/49649/poster_image/large-37718e736a76ba0e3d01beb64ad80866.jpeg', // Let's Roll, Cinnamoroll!
   'tt37509404': 'https://media.kitsu.app/anime/49961/poster_image/large-3f376bc5492dd5de03c4d13295604f95.jpeg', // Gekkan! Nanmono Anime
   'tt39281420': 'https://media.kitsu.app/anime/50253/poster_image/large-5c560f04c35705e046a945dfc5c5227f.jpeg', // Koala's Diary
-  'tt37836273': 'https://cdn.myanimelist.net/images/anime/1260/150826l.jpg', // Shuukan Ranobe Anime (from MAL)
   'tt36270770': 'https://media.kitsu.app/anime/46581/poster_image/large-eb771819d7a6a152d1925f297bcf1928.jpeg', // ROAD OF NARUTO
-  'tt27551813': 'https://cdn.myanimelist.net/images/anime/1921/135489l.jpg', // Idol (from MAL)
+  'tt27551813': 'https://cdn.myanimelist.net/images/anime/1921/135489l.jpg', // Idol (fribb_kitsu but MAL poster better)
   'tt39287518': 'https://media.kitsu.app/anime/49998/poster_image/large-16edb06a60a6644010b55d4df6a2012a.jpeg', // Kaguya-sama Stairway
   'tt37196939': 'https://media.kitsu.app/anime/49966/poster_image/large-420c08752313cc1ad419f79aa4621a8d.jpeg', // Wash it All Away
   'tt39050141': 'https://media.kitsu.app/anime/50371/poster_image/large-e9aaad3342085603c1e3d2667a5954ab.jpeg', // Love Through A Prism
-  // Missing Metahub posters (2025-2026 anime not yet in Metahub)
-  'tt39254742': 'https://media.kitsu.app/anime/50180/poster_image/large-7b7ec122dbdf5f2fd845648a1a207a2a.jpeg', // There's No Freaking Way I'll Be Your Lover! Unless… ~Next Shine~
-  'tt36294552': 'https://media.kitsu.app/anime/47243/poster_image/large-94c32b9f2549fc89ba03506e97129e47.jpeg', // Trigun Stargaze
-  'tt38268282': 'https://media.kitsu.app/anime/49847/poster_image/large-ebde271efe94d783d426087bf357280d.jpeg', // Steel Ball Run: JoJo's Bizarre Adventure
-  'tt37532731': 'https://media.kitsu.app/anime/49372/poster_image/large-13c34534bcbb483eff2e4bd8c6124430.jpeg', // You and I are Polar Opposites
-  'tt32482998': 'https://media.kitsu.app/anime/50431/poster_image/large-22e1364623ae07665ab286bdbad6d02c.jpeg', // Duel Masters LOST: Boukyaku no Taiyou
-  'tt36592708': 'https://media.kitsu.app/anime/48198/poster_image/large-b8e67c6a35c2a5e94b5c0b82e0f5a3c7.jpeg', // There's No Freaking Way I'll be Your Lover! Unless...
+  'tt32482998': 'https://media.kitsu.app/anime/50431/poster_image/large-22e1364623ae07665ab286bdbad6d02c.jpeg', // Duel Masters LOST
+  'tt36592708': 'https://media.kitsu.app/anime/48198/poster_image/large-b8e67c6a35c2a5e94b5c0b82e0f5a3c7.jpeg', // There's No Freaking Way I'll be Your Lover!
+  // Items removed (NOT IN CATALOG after v5):
+  // tt35348212, tt37578217, tt37894464, tt37836273, tt39254742, tt36294552, tt38268282, tt37532731
 };
 
 // Manual metadata overrides for anime with incomplete catalog data
-// These will be merged with catalog data, overriding specific fields
+// V5 cleanup: Removed items NOT IN CATALOG, kept items that still need enhancements
+// Items with fribb_kitsu/imdb_v5_high matches may still need background/cast overrides
 const METADATA_OVERRIDES = {
-  'tt38691315': { // Style of Hiroshi Nohara Lunch
+  'tt38691315': { // Style of Hiroshi Nohara Lunch - imdb_v5_medium
     runtime: '24 min',
     rating: 6.4,
     genres: ['Animation', 'Comedy']
   },
-  'tt37578217': { // Ling Cage
-    description: 'Fallen commander Marc destroyed the Lighthouse. Guided by the mysterious Bai Yue Ling 4068, he returns to the surface. As Mark and Penny journey together to find Bai Yue Ling headquarters, they face numerous crises, including attacks from colossi and Mana beasts, as well as challenges from the mysterious Mark 4079.',
-    rating: 9.2
-  },
-  'tt38037498': { // There was a Cute Girl in the Hero\'s Party
+  'tt38037498': { // There was a Cute Girl in the Hero's Party - imdb_v5_medium
     rating: 7.6,
     genres: ['Animation', 'Action', 'Adventure', 'Fantasy']
   },
-  'tt38647635': { // The Holy Grail of Eris
-    rating: 7.9,
-    genres: ['Animation', 'Drama', 'Mystery']
-  },
-  'tt38798044': { // The Case Book of Arne
+  'tt38798044': { // The Case Book of Arne - fribb_kitsu
     rating: 6.5,
     genres: ['Animation', 'Mystery']
   },
-  'tt35348212': { // Kaijuu Sekai Seifuku (TV) - FAKE IMDB ID, real anime (MAL 56107)
-    genres: ['Slice of Life', 'Pets'],
-    background: 'https://cdn.myanimelist.net/images/anime/1859/137406l.jpg'
-  },
-  'tt37836273': { // Shuukan Ranobe Anime - FAKE IMDB ID, real anime (MAL 61846)
-    runtime: '23 min',
-    genres: ['Action', 'Romance', 'Historical', 'Reincarnation', 'Super Power', 'Time Travel'],
-    background: 'https://cdn.myanimelist.net/images/anime/1260/150826.jpg',
-    cast: [
-      'Fairouz Ai',
-      'Yamashita Daiki',
-      'Ishikawa Kaito',
-      'Takayanagi Tomoyo',
-      'Nemoto Miyari'
-    ]
-  },
-  'tt26443616': { // Auto-generated
-    runtime: '23 min',
-    rating: 6.01,
-    genres: ["Action","Adventure","Comedy","Fantasy"],
-    background: 'https://cdn.myanimelist.net/images/anime/1402/152287l.jpg',
-  },
-  'tt12787182': { // Auto-generated
+  'tt12787182': { // Fushigi Dagashiya - imdb_v5_high
     runtime: '10 min',
     rating: 6.15,
     genres: ["Mystery"],
     background: 'https://cdn.myanimelist.net/images/anime/1602/150098l.jpg',
     cast: ["Iketani, Nobue","Katayama, Fukujuurou","Hasegawa, Ikumi"],
   },
-  'tt38652044': { // Auto-generated
+  'tt38652044': { // Isekai no Sata - fribb_kitsu
     runtime: '23 min',
     rating: 5.48,
     genres: ["Action","Adventure","Fantasy","Isekai"],
     background: 'https://cdn.myanimelist.net/images/anime/1282/102248l.jpg',
     cast: ["Takahashi, Rie","Amasaki, Kouhei","Kubo, Yurika","Mizumori, Chiko","Mano, Ayumi"],
   },
-  'tt37364267': { // Auto-generated
-    runtime: '22 min',
-    rating: 5.64,
-    genres: ["Action","Adventure","Sci-Fi","Space"],
-    background: 'https://cdn.myanimelist.net/images/anime/1821/150610l.jpg',
-    cast: ["Fairouz Ai","Tamura, Mutsumi","Horie, Yui","Ootsuka, Akio","Mitsuishi, Kotono"],
-  },
-  'tt38646949': { // Auto-generated
+  'tt38646949': { // Majutsushi Kunon - fribb_kitsu
     rating: 6.7,
     genres: ["Fantasy"],
     background: 'https://cdn.myanimelist.net/images/anime/1704/154459l.jpg',
     cast: ["Hayami, Saori","Uchida, Maaya","Inomata, Satoshi","Shimazaki, Nobunaga","Okamura, Haruka"],
   },
-  'tt37776400': { // Auto-generated
+  'tt37776400': { // Dungeons & Television - imdb_v5_medium
     rating: 6.64,
     genres: ["Adventure","Fantasy"],
     background: 'https://cdn.myanimelist.net/images/anime/1874/151419l.jpg',
     cast: ["Haneta, Chika","Matsuzaki, Nana","Ishiguro, Chihiro","Okada, Yuuki"],
   },
-  'tt37894464': { // Auto-generated
-    genres: ["Slice of Life"],
-    background: 'https://cdn.myanimelist.net/images/anime/1550/148313l.jpg',
-  },
-  'tt37509404': { // Auto-generated
+  'tt37509404': { // Gekkan! Nanmono Anime - imdb_v5_medium
     genres: ["Slice of Life","Anthropomorphic"],
     background: 'https://cdn.myanimelist.net/images/anime/1581/150017l.jpg',
     cast: ["Hikasa, Youko","Izawa, Shiori","Kitou, Akari","Shiraishi, Haruka","Ootani, Ikue"],
   },
-  'tt39281420': { // Auto-generated
+  'tt39281420': { // Koala Enikki - imdb_v5_medium
     rating: 6.31,
     genres: ["Slice of Life","Anthropomorphic"],
     background: 'https://cdn.myanimelist.net/images/anime/1987/152302l.jpg',
-    cast: ["Uchida, Aya","Uchida, Aya","Uchida, Aya","Uchida, Aya"],
+    cast: ["Uchida, Aya"],
   },
-  'tt1978960': { // Auto-generated
+  'tt1978960': { // Knyacki! - imdb_v5_high
     background: 'https://cdn.myanimelist.net/images/anime/2/55107l.jpg',
   },
-  'tt32158870': { // Auto-generated
-    runtime: '23 min',
-    rating: 6.49,
-    cast: ["Fujidera, Minori","Hiratsuka, Sae","Kubo, Yurika","Hibi, Yuriko","Taichi, You"],
-  },
-  'tt13352178': { // Auto-generated
-    rating: 6.41,
-    description: 'A web series about Hello Kitty and friends living in their own town.',
-    cast: ["Hayashibara, Megumi"],
-  },
-  'tt37532599': { // Auto-generated
-    runtime: '24 min',
-    rating: 6.55,
-    description: 'Reboot of the 80s anime Samurai Troopers (Ronin Warriors).',
-  },
-  'tt34852231': { // Auto-generated
+  'tt34852231': { // Gnosia - fribb_kitsu
     runtime: '25 min',
     cast: ["Hasegawa, Ikumi","Anzai, Chika","Nakamura, Yuuichi","Sakura, Ayane","Seto, Asami"],
   },
-  'tt32832424': { // Auto-generated
+  'tt32832424': { // Haigakura - fribb_kitsu
     runtime: '23 min',
     rating: 5.91,
   },
-  'tt38980285': { // Auto-generated
+  'tt38980285': { // Darwin Jihen - fribb_kitsu
     runtime: '24 min',
     rating: 6.75,
   },
-  'tt32336365': { // Auto-generated
+  'tt32336365': { // Ikoku Nikki - fribb_kitsu
     runtime: '23 min',
     rating: 7.97,
   },
-  'tt38646611': { // Auto-generated
+  'tt38646611': { // Hanazakari no Kimitachi e - fribb_kitsu
     runtime: '4 min',
   },
-  'tt38978132': { // Auto-generated
+  'tt38978132': { // Kizoku Tensei - fribb_kitsu
     rating: 6.43,
     cast: ["Nanami, Karin","Tachibana, Azusa","Sumi, Tomomi Jiena","Yusa, Kouji","Kawanishi, Kengo"],
   },
-  'tt27517921': { // Auto-generated
+  'tt27517921': { // Nitian Xie Shen - imdb_v5_medium
     rating: 7.81,
-    description: 'In the Cangyun Continent, the Medicine Sage Yun Gu was brutally murdered due to possessing one of the Seven Heavenly Treasures, the Sky Poison Pearl, which made it the object of desire for the entire realm. Yun Che, his disciple, carried the treasure to seek revenge for his master and caused boundless bloodshed in the process. Eventually, he was cornered by formidable foes at the Desolate Sky Cliff. Unyielding, Yun Che swallowed the poison pearl and leaped off the cliff to his death. \n\nHowever, guided by an unknown power, his consciousness traversed time and space, awakening in the body of a young boy named Xiao Che in the Flowing Cloud City of the Tianxuan Continent. Xiao Che was born with damaged profound veins, rendering him unable to cultivate profound energy. He was widely ridiculed as a renowned waste within Flowing Cloud City. Due to a pact between their parents, he unexpectedly married Xia Qingyue, the most beautiful woman in the city and a disciple of the Ice Wind Immortal Palace. \n\nJealousy consumed Xiao Yulong, a member of the same clan, and on Xiao Che\'s wedding day, he attempted to poison him. However, thanks to Yun Che\'s time-traveling experience, Xiao Che managed to survive, merging the experiences of two lifetimes into one. Through a series of fortunate events, he also harbored the soul of the enigmatic and extraordinarily gifted girl, Jasmine, who resided within the Sky Poison Pearl. From then on, he embarked on a bizarre and unpredictable path filled with extraordinary challenges.',
   },
-  'tt38980445': { // Auto-generated
+  'tt38980445': { // Mayonaka Heart Tune - fribb_kitsu
     runtime: '23 min',
     rating: 7.26,
   },
-  'tt27432264': { // Auto-generated
+  'tt27432264': { // Xian Ni - imdb_v5_high
     rating: 8.44,
   },
-  'tt34710525': { // Auto-generated
+  'tt34710525': { // Cat's Eye (2025) - fribb_kitsu
     runtime: '25 min',
     rating: 7.22,
   },
-  'tt27865962': { // Auto-generated
+  'tt27865962': { // Beyblade X - fribb_kitsu
     runtime: '23 min',
     rating: 6.8,
   },
-  'tt37196939': { // Auto-generated
+  'tt37196939': { // Kirei ni Shitemoraemasu ka - fribb_kitsu
     runtime: '23 min',
     rating: 6.96,
   },
-  'tt38969275': { // Auto-generated
+  'tt38969275': { // Maou no Musume - fribb_kitsu
     runtime: '23 min',
     rating: 7.24,
   },
-  'tt38037470': { // Auto-generated
+  'tt38037470': { // SI-VIS - fribb_kitsu
     runtime: '23 min',
     rating: 5.98,
   },
-  'tt31608637': { // Auto-generated
+  'tt31608637': { // Xianwu Dizun - imdb_v5_medium
     rating: 7.24,
-    description: 'As a loyal disciple, Ye Chen dedicated himself to guard the spiritual medicine field for his sect. But, during a fight with enemies, the spiritual field was destroyed. His loyalty and dedicating to the sect could not save him. The loyalty he thought he had obtained from his peers and lover, could not save him from betrayal. Thus, he was shamelessly banished from the sect. With the help of a flame falling from heaven, Ye Chen began to develop himself into a stronger cultivator. Battled against his opponents, unfolded his legendary life and rewrote his own story...',
   },
-  'tt33309549': { // Auto-generated
+  'tt33309549': { // Shibou Yuugi - fribb_kitsu
     runtime: '26 min',
     rating: 7.88,
   },
-  'tt38253018': { // Auto-generated
+  'tt38253018': { // Osananajimi to wa - fribb_kitsu
     runtime: '25 min',
     rating: 7.35,
   },
-  'tt37137805': { // Auto-generated
+  'tt37137805': { // Champignon no Majo - fribb_kitsu
     runtime: '24 min',
     rating: 7.31,
   },
-  'tt38128737': { // Auto-generated
+  'tt38128737': { // Ganglion - fribb_kitsu
     runtime: '3 min',
     rating: 6.06,
   },
-  'tt12826684': { // Auto-generated
-    rating: 6.05,
-  },
-  'tt34623148': { // Auto-generated
+  'tt34623148': { // Kagaku×Bouken Survival! - imdb_v5_medium
     description: 'The series follows children in various adventurous situations while weaving information about science into the story.',
   },
-  'tt33349897': { // Auto-generated
+  'tt33349897': { // Kono Kaisha ni Suki - fribb_kitsu
     runtime: '23 min',
   },
-  'tt28197251': { // Auto-generated
+  'tt28197251': { // Chao Neng Lifang - imdb_v5_high
     cast: ["Hioka, Natsumi","Yomichi, Yuki","Nanase, Ayaka","Takahashi, Shinya","Yamamoto, Kanehira"],
   },
-  'tt0306365': { // Auto-generated
+  'tt0306365': { // Nintama Rantarou - fribb_kitsu
     runtime: '10 min',
   },
-  'tt0367414': { // Auto-generated
+  'tt0367414': { // Sore Ike! Anpanman - fribb_kitsu
     runtime: '24 min',
   },
-  'tt32832433': { // Auto-generated
+  'tt32832433': { // Touhai - fribb_kitsu
     runtime: '23 min',
   },
-  'tt38572776': { // Auto-generated
+  'tt38572776': { // Potion, Wagami wo Tasukeru - imdb_v5_high
     runtime: '13 min',
   },
-  'tt32535912': { // Auto-generated
+  'tt32535912': { // Watari-kun - fribb_kitsu
     runtime: '23 min',
   },
-  'tt35769369': { // Auto-generated
+  'tt35769369': { // Chitose-kun - fribb_kitsu
     rating: 7.22,
   },
-  'tt38648925': { // Auto-generated
+  'tt38648925': { // Jack-of-All-Trades - imdb_v5_high
     rating: 6.1,
   },
-  'tt0283783': { // Auto-generated
-    rating: 6.47,
-  },
-  'tt37499375': { // Auto-generated
+  'tt37499375': { // Digimon Beatbreak - fribb_kitsu
     rating: 7.05,
   },
-  'tt28022382': { // Auto-generated
+  'tt28022382': { // Douluo Dalu 2 - imdb_v5_high
     rating: 7.94,
   },
-  'tt17163876': { // Auto-generated
+  'tt17163876': { // Ninjala - fribb_kitsu
     rating: 5.75,
   },
-  'tt15816496': { // Auto-generated
+  'tt15816496': { // Ni Tian Zhizun - imdb_v5_high
     rating: 7.28,
   },
-  'tt26997679': { // Auto-generated
-    rating: 8.51,
-  },
-  'tt37815384': { // Auto-generated
-    rating: 5.6,
-  },
-  'tt35346388': { // Auto-generated
+  'tt35346388': { // #Compass 2.0 - fribb_kitsu
     rating: 5.86,
   },
-  'tt38976904': { // Auto-generated
+  'tt38976904': { // Goumon Baito-kun - fribb_kitsu
     rating: 6.35,
   },
-  'tt34852961': { // Auto-generated
-    rating: 7.26,
-  },
-  'tt34715295': { // Auto-generated
+  'tt34715295': { // Tono to Inu - fribb_kitsu
     rating: 6.68,
   },
-  'tt27617390': { // Auto-generated
-    rating: 7.72,
-  },
-  'tt36270200': { // Auto-generated
-    rating: 6.02,
-  },
-  'tt36632066': { // Auto-generated
+  'tt36632066': { // Odayaka Kizoku - fribb_kitsu
     rating: 6.75,
   },
-  'tt33501934': { // Auto-generated
+  'tt33501934': { // Mushen Ji - imdb_v5_high
     rating: 8.24,
   },
-  'tt37536527': { // Auto-generated
-    rating: 8.4,
-  },
-  'tt34382834': { // Auto-generated
-    rating: 7.42,
-  },
-  'tt32649136': { // Auto-generated
-    rating: 7.92,
-  },
-  'tt36534643': { // Auto-generated
-    rating: 6.08,
-  },
-  'tt36270770': { // ROAD OF NARUTO
+  'tt36270770': { // ROAD OF NARUTO - imdb_v5_high
     genres: ['Action', 'Fantasy', 'Martial Arts'],
     cast: ['Sugiyama, Noriaki', 'Takeuchi, Junko'],
   },
-  'tt13544716': { // My Hero Academia Movie 2: Heroes Rising Epilogue Plus
-    genres: ['Comedy'],
-    background: 'https://cdn.myanimelist.net/images/anime/1447/110165l.jpg',
-    cast: ['Okamoto, Nobuhiko', 'Yamashita, Daiki', 'Terasaki, Yuka', 'Kurosawa, Tomoyo'],
-  },
-  'tt27551813': { // Idol
+  'tt27551813': { // Idol - fribb_kitsu
     genres: ['School', 'Music', 'Slice of Life', 'Comedy', 'Sci-Fi', 'Mecha'],
   },
   'tt21030032': { // Oshi no Ko
     runtime: '30 min',
   },
-
+  // Removed (NOT IN CATALOG after v5):
+  // tt37578217 (Ling Cage), tt35348212 (Kaijuu Sekai Seifuku), tt37836273 (Shuukan Ranobe),
+  // tt26443616, tt37364267, tt37894464, tt32158870, tt13352178, tt37532599, tt12826684,
+  // tt0283783, tt26997679, tt37815384, tt34852961, tt27617390, tt36270200, tt37536527,
+  // tt34382834, tt32649136, tt36534643, tt13544716, tt38647635
 };
 
 function isHiddenDuplicate(anime) {
@@ -1286,6 +2549,89 @@ function isHiddenDuplicate(anime) {
 function isNonAnime(anime) {
   const id = anime.id || anime.imdb_id;
   return NON_ANIME_BLACKLIST.has(id);
+}
+
+// Filter out "deleted" placeholder entries from Kitsu
+function isDeletedEntry(anime) {
+  const name = (anime.name || '').toLowerCase().trim();
+  // Match "delete", "deleted", "deleteg", "deleteasv", etc.
+  return /^delete/i.test(name);
+}
+
+// Filter out recap episodes - these are summary/compilation episodes, not proper anime
+function isRecap(anime) {
+  const name = (anime.name || '').toLowerCase();
+  // Check for recap patterns in name
+  if (/\brecaps?\b/i.test(name)) return true;
+  // Also filter "digest" episodes (Japanese term for recaps)
+  if (/\bdigest\b/i.test(name) && anime.subtype === 'special') return true;
+  return false;
+}
+
+// Filter out music videos from main catalogs (keep in search)
+// Exception: Keep notable music video anime like Interstella5555, Shelter
+const NOTABLE_MUSIC_ANIME = new Set([
+  'tt0368667',  // Interstella5555
+  'tt6443118',  // Shelter
+  'tt1827378',  // Black★Rock Shooter (original MV that spawned anime)
+  'mal-937',    // On Your Mark (Ghibli)
+  'tt27551813', // Idol
+]);
+
+function isMusicVideo(anime) {
+  if (anime.subtype !== 'music') return false;
+  // Keep notable music anime
+  if (NOTABLE_MUSIC_ANIME.has(anime.id)) return false;
+  return true;
+}
+
+// Fix HTML entities in descriptions
+function decodeHtmlEntities(str) {
+  if (!str) return str;
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x2014;/g, '—')
+    .replace(/&#x2013;/g, '–')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+// Filter out OVA entries - these are often incomplete/broken in streaming
+// Keep only: TV series, movies, ONA (web series), and specials
+// Notable OVAs that should be kept (popular standalone OVAs with high ratings)
+const NOTABLE_OVA = new Set([
+  'tt0495212',  // Hellsing Ultimate
+  'tt0279077',  // FLCL
+  'tt0096633',  // Legend of the Galactic Heroes
+  'tt0248119',  // JoJo's Bizarre Adventure (1993)
+  'tt1992386',  // Black Lagoon: Roberta's Blood Trail
+  'tt4483100',  // Kidou Senshi Gundam: The Origin
+  'tt2496120',  // Space Battleship Yamato
+  'tt0315008',  // Shonan Junai Gumi!
+]);
+
+function isOVA(anime) {
+  if (anime.subtype !== 'OVA') return false;
+  // Keep notable OVAs
+  if (NOTABLE_OVA.has(anime.id)) return false;
+  return true;
+}
+
+// Combined filter for catalog exclusions
+function shouldExcludeFromCatalog(anime) {
+  if (isHiddenDuplicate(anime)) return true;
+  if (isNonAnime(anime)) return true;
+  if (isRecap(anime)) return true;
+  if (isMusicVideo(anime)) return true;
+  if (isDeletedEntry(anime)) return true;
+  if (isOVA(anime)) return true;  // Filter out OVAs
+  return false;
 }
 
 function isMovieType(anime) {
@@ -1320,8 +2666,12 @@ function formatAnimeMeta(anime) {
     formatted.releaseInfo = formatted.year.toString();
   }
   
-  if (formatted.description && formatted.description.length > 200) {
-    formatted.description = formatted.description.substring(0, 200) + '...';
+  // Decode HTML entities in description (fixes &apos;, &#x2014;, etc.)
+  if (formatted.description) {
+    formatted.description = decodeHtmlEntities(formatted.description);
+    if (formatted.description.length > 200) {
+      formatted.description = formatted.description.substring(0, 200) + '...';
+    }
   }
   
   // Poster priority:
@@ -1350,6 +2700,7 @@ function searchDatabase(catalogData, query, targetType = null) {
   const scored = [];
   
   for (const anime of catalogData) {
+    // In search, allow recaps and music videos (just exclude blacklisted non-anime)
     if (isHiddenDuplicate(anime)) continue;
     if (isNonAnime(anime)) continue;
     if (targetType === 'series' && !isSeriesType(anime)) continue;
@@ -1398,7 +2749,7 @@ function searchDatabase(catalogData, query, targetType = null) {
 // ===== CATALOG HANDLERS =====
 
 function handleTopRated(catalogData, genreFilter, config) {
-  let filtered = catalogData.filter(anime => isSeriesType(anime) && !isHiddenDuplicate(anime) && !isNonAnime(anime));
+  let filtered = catalogData.filter(anime => isSeriesType(anime) && !shouldExcludeFromCatalog(anime));
   
   if (genreFilter) {
     const genre = parseGenreFilter(genreFilter);
@@ -1414,7 +2765,7 @@ function handleTopRated(catalogData, genreFilter, config) {
 }
 
 function handleSeasonReleases(catalogData, seasonFilter) {
-  let filtered = catalogData.filter(anime => isSeriesType(anime) && !isHiddenDuplicate(anime) && !isNonAnime(anime));
+  let filtered = catalogData.filter(anime => isSeriesType(anime) && !shouldExcludeFromCatalog(anime));
   
   const currentSeason = getCurrentSeason();
   
@@ -1461,6 +2812,14 @@ function handleSeasonReleases(catalogData, seasonFilter) {
   return filtered;
 }
 
+/**
+ * Handle the "Currently Airing" catalog
+ * Uses pre-scraped broadcastDay data from catalog.json (updated via incremental-update.js)
+ * @param {Array} catalogData - Full catalog data
+ * @param {string} genreFilter - Optional weekday filter (e.g., "Monday", "Friday")
+ * @param {Object} config - User configuration
+ * @returns {Array} Filtered and sorted anime list
+ */
 function handleAiring(catalogData, genreFilter, config) {
   // Get parent series that have ongoing seasons (e.g., JJK main entry when S3 is airing)
   const parentsWithOngoingSeasons = getParentsWithOngoingSeasons(catalogData);
@@ -1478,20 +2837,21 @@ function handleAiring(catalogData, genreFilter, config) {
   }
   
   // Include anime that are either:
-  // 1. Directly marked as ONGOING
+  // 1. Directly marked as ONGOING in our catalog
   // 2. Parent series that have an ongoing season (even if parent is marked FINISHED)
   let filtered = catalogData.filter(anime => {
-    if (!isSeriesType(anime) || isHiddenDuplicate(anime) || isNonAnime(anime)) {
+    if (!isSeriesType(anime) || shouldExcludeFromCatalog(anime)) {
       return false;
     }
-    // Include if directly ONGOING or if it's a parent with an ongoing season
-    return anime.status === 'ONGOING' || parentsWithOngoingSeasons.has(anime.id);
+    // Include if directly ONGOING or parent with ongoing season
+    return anime.status === 'ONGOING' || 
+           parentsWithOngoingSeasons.has(anime.id);
   });
   
-  // For parent series with ongoing seasons, inherit the broadcast day from the ongoing season
+  // For anime, enhance broadcast day information for parent series
   filtered = filtered.map(anime => {
-    if (parentsWithOngoingSeasons.has(anime.id) && parentBroadcastDays[anime.id]) {
-      // Create a copy with updated broadcast day from the ongoing season
+    // Inherit broadcast day from ongoing season for parent series
+    if (parentsWithOngoingSeasons.has(anime.id) && parentBroadcastDays[anime.id] && !anime.broadcastDay) {
       return { ...anime, broadcastDay: parentBroadcastDays[anime.id] };
     }
     return anime;
@@ -1536,7 +2896,7 @@ function handleAiring(catalogData, genreFilter, config) {
 }
 
 function handleMovies(catalogData, genreFilter) {
-  let filtered = catalogData.filter(anime => isMovieType(anime) && !isHiddenDuplicate(anime) && !isNonAnime(anime));
+  let filtered = catalogData.filter(anime => isMovieType(anime) && !shouldExcludeFromCatalog(anime));
   
   if (genreFilter) {
     const cleanFilter = parseGenreFilter(genreFilter);
@@ -1645,9 +3005,17 @@ function generateSeasonOptions(filterOptions, currentSeason, showCounts, catalog
 // ===== MANIFEST =====
 
 function getManifest(filterOptions, showCounts = true, catalogData = null, hiddenCatalogs = []) {
+  console.log('[getManifest] filterOptions keys:', Object.keys(filterOptions || {}));
+  console.log('[getManifest] showCounts:', showCounts);
+  console.log('[getManifest] filterOptions.genres:', filterOptions?.genres ? 'present' : 'missing');
+  console.log('[getManifest] filterOptions.weekdays:', filterOptions?.weekdays ? 'present' : 'missing');
+  console.log('[getManifest] filterOptions.movieGenres:', filterOptions?.movieGenres ? 'present' : 'missing');
+  
   const genreOptions = showCounts && filterOptions.genres?.withCounts 
     ? filterOptions.genres.withCounts.filter(g => !g.toLowerCase().startsWith('animation'))
     : (filterOptions.genres?.list || []).filter(g => g.toLowerCase() !== 'animation');
+  
+  console.log('[getManifest] genreOptions length:', genreOptions.length);
   
   // Generate dynamic season options based on current date
   // Shows: Current season + past seasons, with "Upcoming" for all future seasons
@@ -1739,7 +3107,7 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
 
   return {
     id: 'community.animestream',
-    version: '1.1.0',
+    version: '1.2.0',
     name: 'AnimeStream',
     description: 'All your favorite Anime series and movies with filtering by genre, seasonal releases, currently airing and ratings. Stream both SUB and DUB options via AllAnime.',
     // CRITICAL: Use explicit resource objects with types and idPrefixes
@@ -1755,6 +3123,13 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
         name: 'stream',
         types: ['series', 'movie', 'anime'],
         idPrefixes: ['tt', 'kitsu', 'mal']
+      },
+      // Subtitles handler is used to trigger scrobbling when user opens an episode
+      // Returns empty subtitles but marks episode as watched on AniList
+      {
+        name: 'subtitles',
+        types: ['series', 'movie'],
+        idPrefixes: ['tt']
       }
     ],
     types: ['anime', 'series', 'movie'],
@@ -1764,6 +3139,8 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
       configurable: true,
       configurationRequired: false
     },
+    // Contact email for support
+    contactEmail: 'animestream-addon@proton.me',
     logo: 'https://raw.githubusercontent.com/Zen0-99/animestream-addon/master/public/logo.png',
     background: 'https://raw.githubusercontent.com/Zen0-99/animestream-addon/master/public/logo.png',
     stremioAddonsConfig: {
@@ -1776,7 +3153,7 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
 // ===== CONFIG PARSING =====
 
 function parseConfig(configStr) {
-  const config = { excludeLongRunning: false, showCounts: true, hiddenCatalogs: [] };
+  const config = { excludeLongRunning: false, showCounts: true, hiddenCatalogs: [], anilistToken: '', malToken: '', userId: '' };
   
   if (!configStr) return config;
   
@@ -1797,6 +3174,17 @@ function parseConfig(configStr) {
         .map(c => c.trim().toLowerCase())
         .filter(c => validCatalogs.includes(c))
         .slice(0, 3); // Max 3 hidden (at least 1 must remain)
+    }
+    if (key === 'uid' && value) {
+      // User ID for token storage lookup (e.g., uid=abc123)
+      config.userId = decodeURIComponent(value);
+    }
+    // Legacy: direct token in URL (deprecated, use uid instead)
+    if (key === 'al' && value) {
+      config.anilistToken = decodeURIComponent(value);
+    }
+    if (key === 'mal' && value) {
+      config.malToken = decodeURIComponent(value);
     }
   }
   
@@ -1873,17 +3261,101 @@ function findAnimeByImdbId(catalog, imdbId) {
   return findAnimeById(catalog, imdbId);
 }
 
+// Direct AllAnime show ID mappings for popular series
+// Maps: IMDB ID + season -> AllAnime show ID
+// This bypasses search entirely for known popular series
+const DIRECT_ALLANIME_IDS = {
+  // My Hero Academia seasons (tt5626028)
+  'tt5626028:1': 'gKwRaeqdMMkgmCLZw', // MHA Season 1 (13 eps)
+  'tt5626028:2': 'JYfouPvxtkY5923Me', // MHA Season 2 (25 eps) - "Hero Academia 2"
+  'tt5626028:3': '9ufLY3tw89ppeMhSK', // MHA Season 3 (25 eps) - "Hero Academia 3"
+  'tt5626028:4': 'f2EZhiqts8FwRYi8E', // MHA Season 4 (25 eps) - "Hero Academia S4"
+  'tt5626028:5': '8XhppLabWy7vJ8v76', // MHA Season 5 (25 eps) - "Boku no Academia S 5"
+  'tt5626028:6': 'Yr7ha4n76ofd7BeSX', // MHA Season 6 (25 eps)
+  'tt5626028:7': 'cskJzx6rseAgcGcAe', // MHA Season 7 (21 eps)
+  
+  // Solo Leveling (tt21209876)
+  'tt21209876:1': 'B6AMhLy6EQHDgYgBF', // Solo Leveling Season 1 (Ore dake Level Up na Ken)
+  'tt21209876:2': '9NdrgcZjsp7HEJ5oK', // Solo Leveling Season 2 (Arise from the Shadow)
+  
+  // Demon Slayer: Kimetsu no Yaiba (tt9335498)
+  'tt9335498:1': 'gvwLtiYciaenJRoFy', // Kimetsu no Yaiba Season 1 (26 eps) - MAL:38000
+  'tt9335498:2': 'ECmu5W4MPnKNFXqPZ', // Mugen Train Arc (7 eps) - MAL:49926
+  'tt9335498:3': 'SJms742bSTrcyJZay', // Yuukaku-hen / Entertainment District Arc (11 eps) - MAL:47778
+  'tt9335498:4': 'XJzfDyv8vsXWCMkTk', // Katanakaji no Sato-hen / Swordsmith Village (11 eps) - MAL:51019
+  'tt9335498:5': 'ubGJNAmJmdKSjNBSX', // Hashira Geiko-hen / Hashira Training (8 eps) - MAL:55701
+  
+  // Jujutsu Kaisen (tt12343534)
+  'tt12343534:1': '8Ti9Lnd3gW7TgeCXj', // Jujutsu Kaisen Season 1 (24 eps) - MAL:40748
+  
+  // Note: Attack on Titan Season 1 (tt2560140:1) is NOT available on AllAnime search
+  // Season 2+ are available but S1 is missing from their index
+};
+
+// Title aliases for anime with different names across sources
+// Maps: our catalog name -> AllAnime search terms (used as fallback)
+const TITLE_ALIASES = {
+  'my hero academia': ['Boku no Hero Academia'],
+  'attack on titan': ['Shingeki no Kyojin'],
+  'demon slayer': ['Kimetsu no Yaiba'],
+  'jujutsu kaisen': ['Jujutsu Kaisen'],
+  'solo leveling': ['Ore dake Level Up na Ken', 'Solo Leveling'],
+  'dark moon: kuro no tsuki - tsuki no saidan': ['Dark Moon: Tsuki no Saidan', 'Dark Moon: The Blood Altar'],
+  'dark moon: kuro no tsuki': ['Dark Moon: Tsuki no Saidan', 'Dark Moon: The Blood Altar'],
+  'monogatari series: off & monster season': ['Monogatari Series: Off & Monster Season', 'Monogatari Off Monster'],
+};
+
 // Search AllAnime for matching show (using direct API)
-async function findAllAnimeShow(title) {
+// Now supports optional malId/aniListId for exact verification
+async function findAllAnimeShow(title, malId = null, aniListId = null) {
   if (!title) return null;
   
+  // Check for known title aliases first
+  const normalizedTitle = title.toLowerCase();
+  for (const [aliasKey, searchTerms] of Object.entries(TITLE_ALIASES)) {
+    if (normalizedTitle.includes(aliasKey) || aliasKey.includes(normalizedTitle)) {
+      for (const searchTerm of searchTerms) {
+        console.log(`Trying alias: "${searchTerm}" for "${title}"`);
+        const results = await searchAllAnime(searchTerm, 5);
+        if (results && results.length > 0) {
+          // If we have MAL/AniList ID, verify before accepting
+          if (malId || aniListId) {
+            const verified = results.find(r => 
+              (malId && r.malId === malId) || (aniListId && r.aniListId === aniListId)
+            );
+            if (verified) {
+              console.log(`Found via alias + ID verification: ${verified.id} - ${verified.title}`);
+              return verified.id;
+            }
+          } else {
+            console.log(`Found via alias: ${results[0].id} - ${results[0].title}`);
+            return results[0].id;
+          }
+        }
+      }
+    }
+  }
+  
   try {
-    const results = await searchAllAnime(title, 10);
+    const results = await searchAllAnime(title, 15);
     
     if (!results || results.length === 0) return null;
     
+    // PRIORITY 1: Direct MAL/AniList ID match (most reliable)
+    if (malId || aniListId) {
+      const idMatch = results.find(r => 
+        (malId && r.malId === malId) || (aniListId && r.aniListId === aniListId)
+      );
+      if (idMatch) {
+        console.log(`Found via ID match (MAL:${malId}/AL:${aniListId}): ${idMatch.id} - ${idMatch.title}`);
+        return idMatch.id;
+      }
+      console.log(`No ID match found among ${results.length} results for MAL:${malId}/AL:${aniListId}`);
+    }
+    
+    // PRIORITY 2: Fuzzy title matching (fallback)
     // Normalize titles for matching
-    const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalizedSearchTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '');
     
     // Find best match using Levenshtein distance
     let bestMatch = null;
@@ -1895,15 +3367,15 @@ async function findAllAnimeShow(title) {
       const nativeTitle = (show.nativeTitle || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       
       // Exact match
-      if (showName === normalizedTitle) {
+      if (showName === normalizedSearchTitle) {
         score = 100;
-      } else if (showName.includes(normalizedTitle) || normalizedTitle.includes(showName)) {
+      } else if (showName.includes(normalizedSearchTitle) || normalizedSearchTitle.includes(showName)) {
         score = 80;
       } else {
         // Fuzzy match
         const similarity = Math.max(
-          stringSimilarity(normalizedTitle, showName),
-          stringSimilarity(normalizedTitle, nativeTitle)
+          stringSimilarity(normalizedSearchTitle, showName),
+          stringSimilarity(normalizedSearchTitle, nativeTitle)
         );
         score = similarity * 0.9;
       }
@@ -1917,10 +3389,14 @@ async function findAllAnimeShow(title) {
       }
     }
     
-    if (bestMatch && bestScore >= 60) {
+    // Increase threshold when we have IDs but couldn't match them (extra cautious)
+    const threshold = (malId || aniListId) ? 75 : 60;
+    if (bestMatch && bestScore >= threshold) {
+      console.log(`Found via title match (score:${bestScore.toFixed(1)}): ${bestMatch.id} - ${bestMatch.title}`);
       return bestMatch.id;
     }
     
+    console.log(`No confident match for "${title}" (best score: ${bestScore.toFixed(1)}, threshold: ${threshold})`);
     return null;
   } catch (e) {
     console.error('Search error:', e);
@@ -1930,37 +3406,51 @@ async function findAllAnimeShow(title) {
 
 // Season-aware search for AllAnime shows
 // Many anime have separate AllAnime entries per season (e.g., "Jujutsu Kaisen Season 2")
-async function findAllAnimeShowForSeason(title, season) {
+// Now accepts optional IDs for direct lookup and verification
+async function findAllAnimeShowForSeason(title, season, imdbId = null, malId = null, aniListId = null) {
   if (!title) return null;
+  
+  // FIRST: Check direct AllAnime ID mappings (most reliable)
+  if (imdbId) {
+    const directKey = `${imdbId}:${season}`;
+    if (DIRECT_ALLANIME_IDS[directKey]) {
+      console.log(`Using direct AllAnime ID for ${directKey}: ${DIRECT_ALLANIME_IDS[directKey]}`);
+      return DIRECT_ALLANIME_IDS[directKey];
+    }
+  }
   
   // Known season name mappings for popular shows
   // Maps: "base title" + season number -> AllAnime search terms
   const seasonMappings = {
+    'solo leveling': {
+      1: ['Solo Leveling'],
+      2: ['Solo Leveling Season 2', 'Solo Leveling -Arise from the Shadow-', 'Solo Leveling Arise from the Shadow']
+    },
     'jujutsu kaisen': {
       1: ['Jujutsu Kaisen'],
       2: ['Jujutsu Kaisen Season 2', 'Jujutsu Kaisen 2nd Season'],
       3: ['Jujutsu Kaisen: The Culling Game', 'Jujutsu Kaisen Season 3', 'Jujutsu Kaisen Culling Game']
     },
     'attack on titan': {
-      1: ['Attack on Titan'],
-      2: ['Attack on Titan Season 2'],
-      3: ['Attack on Titan Season 3'],
-      4: ['Attack on Titan: The Final Season', 'Attack on Titan Final Season']
+      1: ['Shingeki no Kyojin'],
+      2: ['Shingeki no Kyojin Season 2'],
+      3: ['Shingeki no Kyojin Season 3'],
+      4: ['Shingeki no Kyojin: The Final Season', 'Attack on Titan Final Season']
     },
     'my hero academia': {
-      1: ['My Hero Academia'],
-      2: ['My Hero Academia Season 2', 'My Hero Academia 2nd Season'],
-      3: ['My Hero Academia Season 3', 'My Hero Academia 3rd Season'],
-      4: ['My Hero Academia Season 4', 'My Hero Academia 4th Season'],
-      5: ['My Hero Academia Season 5', 'My Hero Academia 5th Season'],
-      6: ['My Hero Academia Season 6', 'My Hero Academia 6th Season'],
-      7: ['My Hero Academia Season 7', 'My Hero Academia 7th Season']
+      1: ['Boku no Hero Academia'],
+      2: ['Boku no Hero Academia 2nd Season'],
+      3: ['Boku no Hero Academia 3rd Season'],
+      4: ['Boku no Hero Academia 4th Season'],
+      5: ['Boku no Hero Academia 5th Season'],
+      6: ['Boku no Hero Academia 6th Season'],
+      7: ['Boku no Hero Academia 7th Season', 'My Hero Academia Final Season']
     },
     'demon slayer': {
-      1: ['Demon Slayer', 'Kimetsu no Yaiba'],
-      2: ['Demon Slayer: Entertainment District Arc', 'Demon Slayer Season 2'],
-      3: ['Demon Slayer: Swordsmith Village Arc', 'Demon Slayer Season 3'],
-      4: ['Demon Slayer: Hashira Training Arc', 'Demon Slayer Season 4']
+      1: ['Kimetsu no Yaiba'],
+      2: ['Kimetsu no Yaiba: Yuukaku-hen', 'Demon Slayer: Entertainment District Arc'],
+      3: ['Kimetsu no Yaiba: Katanakaji no Sato-hen', 'Demon Slayer: Swordsmith Village Arc'],
+      4: ['Kimetsu no Yaiba: Hashira Geiko-hen', 'Demon Slayer: Hashira Training Arc']
     }
   };
   
@@ -1973,7 +3463,7 @@ async function findAllAnimeShowForSeason(title, season) {
         // Try each search term for this season
         for (const searchTerm of seasons[season]) {
           console.log(`Trying season mapping: "${searchTerm}" for ${title} S${season}`);
-          const showId = await findAllAnimeShow(searchTerm);
+          const showId = await findAllAnimeShow(searchTerm, malId, aniListId);
           if (showId) {
             console.log(`Found show via season mapping: ${showId}`);
             return showId;
@@ -1998,8 +3488,8 @@ async function findAllAnimeShowForSeason(title, season) {
   }
   
   for (const searchTerm of searchStrategies) {
-    console.log(`Searching AllAnime with: "${searchTerm}"`);
-    const showId = await findAllAnimeShow(searchTerm);
+    console.log(`Searching AllAnime with: "${searchTerm}" (MAL:${malId}, AL:${aniListId})`);
+    const showId = await findAllAnimeShow(searchTerm, malId, aniListId);
     if (showId) {
       return showId;
     }
@@ -2023,6 +3513,12 @@ async function handleMeta(catalog, type, id) {
   const baseId = decodedId.split(':')[0];
   
   console.log(`Meta request for ${baseId}`);
+  
+  // Block known non-anime entries (Western animation, etc.)
+  if (NON_ANIME_BLACKLIST.has(baseId)) {
+    console.log(`Blocked non-anime meta request: ${baseId}`);
+    return { meta: null };
+  }
   
   // First check our catalog (supports tt*, mal-*, kitsu:*)
   let anime = findAnimeById(catalog, baseId);
@@ -2071,10 +3567,30 @@ async function handleMeta(catalog, type, id) {
     cinemeta = await fetchCinemetaMeta(baseId, type);
   }
   
-  // Build episodes from AllAnime data (if available) or catalog data
+  // Build episodes - PRIORITY: Cinemeta (has accurate seasons) > AllAnime > Catalog
+  // Cinemeta is the authoritative source for season/episode structure
+  // AllAnime is only used for stream discovery, not metadata
   const episodes = [];
   
-  if (showDetails) {
+  // For IMDB IDs, ALWAYS prefer Cinemeta's video list for proper season structure
+  // This ensures multi-season anime display correctly in Stremio
+  if (baseId.startsWith('tt')) {
+    // Fetch Cinemeta if we haven't already
+    if (!cinemeta) {
+      cinemeta = await fetchCinemetaMeta(baseId, type);
+    }
+    
+    if (cinemeta && cinemeta.videos && cinemeta.videos.length > 0) {
+      // Use Cinemeta videos - they have proper season/episode numbers
+      console.log(`Using Cinemeta videos for ${baseId}: ${cinemeta.videos.length} episodes across multiple seasons`);
+      episodes.push(...cinemeta.videos);
+    }
+  }
+  
+  // Fallback to AllAnime episode list if Cinemeta doesn't have videos
+  // This covers cases where Cinemeta is missing data for newer/obscure anime
+  if (episodes.length === 0 && showDetails) {
+    console.log(`Cinemeta videos unavailable, falling back to AllAnime for ${baseId}`);
     const availableEps = showDetails.availableEpisodesDetail || {};
     const subEpisodes = availableEps.sub || [];
     const dubEpisodes = availableEps.dub || [];
@@ -2084,7 +3600,7 @@ async function handleMeta(catalog, type, id) {
     
     for (const epNum of allEpisodes) {
       const epNumber = parseFloat(epNum);
-      // Assume season 1 for now (most anime)
+      // Assume season 1 for AllAnime-only shows (no multi-season data available)
       const season = 1;
       
       episodes.push({
@@ -2096,11 +3612,11 @@ async function handleMeta(catalog, type, id) {
         released: new Date().toISOString() // AllAnime doesn't provide release dates easily
       });
     }
-  } else if (cinemeta && cinemeta.videos && cinemeta.videos.length > 0) {
-    // Use Cinemeta videos as second fallback
-    episodes.push(...cinemeta.videos);
-  } else if (anime.videos && anime.videos.length > 0) {
-    // Use catalog videos as last resort
+  }
+  
+  // Last resort: use catalog videos
+  if (episodes.length === 0 && anime.videos && anime.videos.length > 0) {
+    console.log(`Using catalog videos for ${baseId}`);
     episodes.push(...anime.videos);
   }
   
@@ -2118,8 +3634,8 @@ async function handleMeta(catalog, type, id) {
                           hasCinemeta && cinemeta.description ? cinemeta.description :
                           anime.description || '';
   
-  // Clean up description - remove source citations
-  const cleanDescription = stripHtml(bestDescription).replace(/\s*\(Source:.*?\)\s*$/i, '').trim();
+  // Clean up description - remove source citations and decode HTML entities
+  const cleanDescription = decodeHtmlEntities(stripHtml(bestDescription).replace(/\s*\(Source:.*?\)\s*$/i, '').trim());
   
   const bestBackground = overrides.background ? overrides.background :
                          hasAllAnime && showDetails.banner ? showDetails.banner :
@@ -2154,93 +3670,12 @@ async function handleMeta(catalog, type, id) {
 }
 
 // ===== STREAM SERVING CONFIGURATION =====
-// To reduce server load, we only serve AllAnime streams for:
-// 1. Currently airing anime (status: ONGOING)
-// 2. For long-running anime (100+ episodes), only the newest 3 episodes
-// Older/completed anime have plenty of other sources (Torrentio, etc.)
-
-const LONG_RUNNING_THRESHOLD = 100; // Episodes
-const MAX_EPISODES_FOR_LONG_RUNNING = 3; // Only serve newest N episodes for very long-running series
-const MAX_EPISODES_FOR_AIRING_SEASON = 5; // For currently airing seasons, only serve the newest 5 episodes
-const RECENT_EPISODE_DAYS = 30; // Episodes released within this many days are considered "recent"
+// All anime streams are served - no restrictions
+// AllAnime supports all anime, not just currently airing
 
 function shouldServeAllAnimeStream(anime, requestedEpisode, requestedSeason, catalogData, episodeReleaseDate, totalSeasonEpisodes) {
-  // If not in our catalog, we can't determine status - allow stream
-  if (!anime) return { allowed: true, reason: 'not in catalog' };
-  
-  // Check if this anime is directly ONGOING
-  let isAiring = anime.status === 'ONGOING';
-  
-  // If the anime itself is not ONGOING, check if it's a parent with an ongoing season
-  // This handles cases like JJK where the main entry (tt12343534) is FINISHED but S3 is ONGOING
-  if (!isAiring && catalogData) {
-    const hasOngoingSeason = parentHasOngoingSeason(anime.id, catalogData);
-    if (hasOngoingSeason) {
-      // Only allow streaming for the currently airing season, not older seasons
-      const ongoingSeasonNum = getOngoingSeasonNumber(anime.id);
-      if (ongoingSeasonNum && requestedSeason === ongoingSeasonNum) {
-        console.log(`[Stream] ${anime.name} S${requestedSeason} is the ongoing season - allowing stream`);
-        isAiring = true;
-      } else if (ongoingSeasonNum) {
-        console.log(`[Stream] ${anime.name} S${requestedSeason} requested but S${ongoingSeasonNum} is airing - blocking`);
-        return {
-          allowed: false,
-          reason: 'old_season',
-          message: `Only Season ${ongoingSeasonNum} is currently airing. Use Torrentio for older seasons.`
-        };
-      }
-    }
-  }
-  
-  // If we have episode release date info, check if this specific episode is recent
-  if (!isAiring && episodeReleaseDate) {
-    const releaseDate = new Date(episodeReleaseDate);
-    const now = new Date();
-    const daysSinceRelease = Math.floor((now - releaseDate) / (1000 * 60 * 60 * 24));
-    
-    if (daysSinceRelease <= RECENT_EPISODE_DAYS) {
-      console.log(`[Stream] Episode released ${daysSinceRelease} days ago - allowing stream`);
-      return { allowed: true, reason: 'recent_episode' };
-    }
-  }
-  
-  if (!isAiring) {
-    return { 
-      allowed: false, 
-      reason: 'not_airing',
-      message: 'This anime is no longer airing. Use Torrentio or other addons for completed series.'
-    };
-  }
-  
-  // For currently airing seasons with many episodes, only serve the newest 5 episodes
-  // This prevents serving 100+ episodes of long-running shows like One Piece
-  if (isAiring && totalSeasonEpisodes && totalSeasonEpisodes > MAX_EPISODES_FOR_AIRING_SEASON) {
-    const oldestAllowedEpisode = totalSeasonEpisodes - MAX_EPISODES_FOR_AIRING_SEASON + 1;
-    
-    if (requestedEpisode < oldestAllowedEpisode) {
-      return {
-        allowed: false,
-        reason: 'old_episode_in_airing_season',
-        message: `Only the newest ${MAX_EPISODES_FOR_AIRING_SEASON} episodes (${oldestAllowedEpisode}-${totalSeasonEpisodes}) are available for this ongoing series. Use Torrentio for older episodes.`
-      };
-    }
-  }
-  
-  // For long-running anime overall (e.g., 500+ total episodes), only serve newest 3 episodes
-  const totalEpisodes = anime.episodeCount || anime.episodes || 0;
-  if (totalEpisodes >= LONG_RUNNING_THRESHOLD) {
-    const oldestAllowedEpisode = Math.max(1, totalEpisodes - MAX_EPISODES_FOR_LONG_RUNNING + 1);
-    
-    if (requestedEpisode < oldestAllowedEpisode) {
-      return {
-        allowed: false,
-        reason: 'long_running_old_episode',
-        message: `For long-running series, only episodes ${oldestAllowedEpisode}-${totalEpisodes} are available. Use Torrentio for older episodes.`
-      };
-    }
-  }
-  
-  return { allowed: true, reason: 'airing' };
+  // Allow all streams - no restrictions
+  return { allowed: true, reason: 'all_allowed' };
 }
 
 // Handle stream requests (using direct API)
@@ -2279,6 +3714,30 @@ async function handleStream(catalog, type, id) {
   if (!anime && baseId.startsWith('tt')) {
     console.log(`Anime not in catalog, trying Cinemeta for ${baseId}`);
     anime = await fetchCinemetaMeta(baseId, type);
+    
+    // If Cinemeta fails, try to get MAL ID from Haglund and then use AniList
+    if (!anime) {
+      console.log(`Cinemeta failed, trying Haglund+AniList fallback for ${baseId}`);
+      try {
+        const idMappings = await getIdMappings(baseId, 'imdb');
+        if (idMappings.mal) {
+          console.log(`Found MAL ID ${idMappings.mal} via Haglund, fetching from AniList`);
+          anime = await fetchAniListByMalId(idMappings.mal);
+          if (anime) {
+            console.log(`Found anime via AniList: ${anime.name}`);
+          }
+        }
+      } catch (err) {
+        console.log(`Haglund+AniList fallback failed: ${err.message}`);
+      }
+    }
+    
+    // Last resort: Search AllAnime directly by IMDB ID pattern
+    // This catches anime not in any mapping database
+    if (!anime) {
+      console.log(`All metadata sources failed for ${baseId}, attempting direct AllAnime search`);
+      // We'll handle this below by searching with a generic query
+    }
   }
   
   // If still not found and it's a MAL ID, search AllAnime directly
@@ -2286,26 +3745,35 @@ async function handleStream(catalog, type, id) {
     console.log(`MAL ID detected, searching AllAnime directly for ${baseId}`);
     const malId = baseId.replace('mal-', '');
     
-    // Search AllAnime by MAL ID - try to get show details directly
-    try {
-      const showDetails = await getAllAnimeShowDetails(malId);
-      if (showDetails) {
-        showId = malId; // We have the MAL ID which AllAnime uses
-        anime = { name: showDetails.name || showDetails.englishName || 'Unknown' };
-        totalSeasonEpisodes = showDetails.episodeCount || null;
-        
-        // Parse available episodes (e.g., {"sub": [1,2,3], "dub": [1,2]})
-        if (showDetails.availableEpisodesDetail) {
-          const available = showDetails.availableEpisodesDetail.sub || showDetails.availableEpisodesDetail.dub || [];
-          if (available.length > 0) {
-            availableEpisodes = Math.max(...available.map(ep => typeof ep === 'string' ? parseInt(ep) : ep));
+    // First try AniList to get the proper title
+    const aniListInfo = await fetchAniListByMalId(malId);
+    if (aniListInfo) {
+      anime = aniListInfo;
+      console.log(`Found anime via AniList: ${anime.name}`);
+    }
+    
+    // Also try to get show details directly from AllAnime
+    if (!anime) {
+      try {
+        const showDetails = await getAllAnimeShowDetails(malId);
+        if (showDetails) {
+          showId = malId; // We have the MAL ID which AllAnime uses
+          anime = { name: showDetails.name || showDetails.englishName || 'Unknown', mal_id: malId };
+          totalSeasonEpisodes = showDetails.episodeCount || null;
+          
+          // Parse available episodes (e.g., {"sub": [1,2,3], "dub": [1,2]})
+          if (showDetails.availableEpisodesDetail) {
+            const available = showDetails.availableEpisodesDetail.sub || showDetails.availableEpisodesDetail.dub || [];
+            if (available.length > 0) {
+              availableEpisodes = Math.max(...available.map(ep => typeof ep === 'string' ? parseInt(ep) : ep));
+            }
           }
+          
+          console.log(`Found AllAnime show via MAL ID: ${anime.name} (${availableEpisodes || totalSeasonEpisodes} episodes available)`);
         }
-        
-        console.log(`Found AllAnime show via MAL ID: ${anime.name} (${availableEpisodes || totalSeasonEpisodes} episodes available)`);
+      } catch (err) {
+        console.log(`AllAnime lookup by MAL ID failed: ${err.message}`);
       }
-    } catch (err) {
-      console.log(`AllAnime lookup by MAL ID failed: ${err.message}`);
     }
   }
   
@@ -2316,8 +3784,13 @@ async function handleStream(catalog, type, id) {
   
   // Search AllAnime for matching show (if we don't already have showId)
   // For multi-season shows, we need to find the correct season entry
+  // Pass baseId (IMDB ID) and MAL/AniList IDs for ID-based verification
   if (!showId) {
-    showId = await findAllAnimeShowForSeason(anime.name, season);
+    // Extract MAL/AniList IDs from catalog for verification
+    const catalogMalId = anime.mal_id ? parseInt(anime.mal_id) : null;
+    const catalogAniListId = anime.anilist_id ? parseInt(anime.anilist_id) : null;
+    
+    showId = await findAllAnimeShowForSeason(anime.name, season, baseId, catalogMalId, catalogAniListId);
     
     // Get episode count for the found show
     if (showId) {
@@ -2360,9 +3833,28 @@ async function handleStream(catalog, type, id) {
     };
   }
   
+  // Convert Stremio season:episode to absolute episode number for long-running shows
+  // Cinemeta splits long anime into seasons but AllAnime uses absolute episode numbers
+  const absoluteEpisode = convertToAbsoluteEpisode(baseId, season, episode);
+  if (absoluteEpisode !== episode) {
+    console.log(`Episode mapping: S${season}E${episode} → absolute E${absoluteEpisode} for ${anime?.name || baseId}`);
+  }
+  
+  // Episode bounds validation - prevent requesting wrong episodes
+  if (availableEpisodes && absoluteEpisode > availableEpisodes) {
+    console.log(`Episode ${absoluteEpisode} exceeds available episodes (${availableEpisodes}) for ${anime?.name || baseId}`);
+    return { 
+      streams: [{
+        name: 'AnimeStream',
+        title: `⚠️ Episode ${absoluteEpisode} not available yet (${availableEpisodes} released)`,
+        externalUrl: 'https://stremio.com'
+      }]
+    };
+  }
+  
   // Fetch streams directly from AllAnime API
   try {
-    const streams = await getEpisodeSources(showId, episode);
+    const streams = await getEpisodeSources(showId, absoluteEpisode);
     
     if (!streams || streams.length === 0) {
       return { streams: [] };
@@ -2729,6 +4221,464 @@ export default {
       } catch (error) {
         console.error('Stream handler error:', error.message);
         return jsonResponse({ streams: [] }, { maxAge: 60 });
+      }
+    }
+    
+    // ===== SUBTITLES HANDLER (SCROBBLING TRIGGER) =====
+    // This handler is called when user opens an episode in Stremio
+    // We use it to trigger scrobbling to AniList/MAL (marking episode as watched)
+    // Based on mal-stremio-addon approach: https://github.com/SageTendo/mal-stremio-addon
+    const subtitlesMatch = path.match(/^(?:\/([^\/]+))?\/subtitles\/([^\/]+)\/(.+)\.json$/);
+    if (subtitlesMatch) {
+      const [, configStr, type, id] = subtitlesMatch;
+      const config = parseConfig(configStr);
+      
+      // Parse ID - format: tt1234567:season:episode for series, tt1234567 for movies
+      const parts = id.split(':');
+      const imdbId = parts[0];
+      const season = parts.length >= 2 ? parseInt(parts[1]) : 1;
+      const episode = parts.length >= 3 ? parseInt(parts[2]) : 1;
+      const isMovie = type === 'movie' || parts.length === 1;
+      
+      // Get user tokens from KV if user ID is provided
+      if (config.userId && imdbId.startsWith('tt')) {
+        // Don't await - let scrobbling happen in background
+        // This prevents slowing down subtitle loading
+        (async () => {
+          try {
+            console.log(`[Scrobble] Triggering for ${imdbId} S${season}E${episode} (user: ${config.userId})`);
+            
+            // Get user tokens from KV
+            const userTokens = await getUserTokens(config.userId, env);
+            if (!userTokens) {
+              console.log(`[Scrobble] No tokens found for user ${config.userId}`);
+              return;
+            }
+            
+            // Get ID mappings from Haglund API
+            const mappings = await getIdMappingsFromImdb(imdbId, season);
+            console.log(`[Scrobble] ID mappings:`, mappings);
+            
+            // Scrobble to AniList if token exists and AniList ID found
+            if (userTokens.anilistToken && mappings.anilist) {
+              try {
+                console.log(`[Scrobble] Updating AniList ${mappings.anilist} episode ${episode}`);
+                const result = await scrobbleToAnilist(mappings.anilist, episode, userTokens.anilistToken);
+                console.log(`[Scrobble] AniList result:`, result);
+              } catch (err) {
+                console.error(`[Scrobble] AniList error:`, err.message);
+              }
+            }
+            
+            // Scrobble to MAL if token exists and MAL ID found
+            if (userTokens.malToken && mappings.mal) {
+              try {
+                console.log(`[Scrobble] Updating MAL ${mappings.mal} episode ${episode}`);
+                const result = await scrobbleToMal(mappings.mal, episode, userTokens.malToken, isMovie);
+                console.log(`[Scrobble] MAL result:`, result);
+              } catch (err) {
+                console.error(`[Scrobble] MAL error:`, err.message);
+              }
+            }
+            
+            if (!mappings.anilist && !mappings.mal) {
+              console.log(`[Scrobble] No AniList or MAL ID found for ${imdbId}`);
+            }
+          } catch (error) {
+            console.error(`[Scrobble] Error:`, error.message);
+          }
+        })();
+      }
+      
+      // Always return empty subtitles - we're just using this handler for scrobbling
+      return jsonResponse({ subtitles: [] }, { maxAge: 60 });
+    }
+    
+    // ===== SCROBBLING API ROUTES =====
+    
+    // AniList OAuth callback - handles the redirect from AniList after authorization
+    // GET /oauth/anilist?access_token=...&expires_in=...
+    if (path === '/oauth/anilist') {
+      // Return HTML page that extracts the hash fragment and saves the token
+      const oauthHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>AniList Connected - AnimeStream</title>
+  <style>
+    body { font-family: system-ui; background: #0A0F1C; color: #EEF1F7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+    .card { background: #161737; border-radius: 16px; padding: 32px; text-align: center; max-width: 400px; }
+    .success { color: #22c55e; font-size: 48px; }
+    .error { color: #ef4444; font-size: 48px; }
+    h1 { margin: 16px 0 8px; }
+    p { color: #5F67AD; }
+    .btn { display: inline-block; background: #3926A6; color: white; padding: 12px 24px; border-radius: 12px; text-decoration: none; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="success" id="icon">✓</div>
+    <h1 id="title">Connecting...</h1>
+    <p id="message">Please wait...</p>
+  </div>
+  <script>
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get('access_token');
+    const expiresIn = params.get('expires_in');
+    
+    if (accessToken) {
+      // Store token in localStorage
+      localStorage.setItem('animestream_anilist_token', accessToken);
+      localStorage.setItem('animestream_anilist_expires', Date.now() + (parseInt(expiresIn) * 1000));
+      
+      document.getElementById('title').textContent = 'AniList Connected!';
+      document.getElementById('message').innerHTML = 'Your AniList account is now linked.<br>You can close this window.';
+      
+      // Notify parent window if opened as popup
+      if (window.opener) {
+        window.opener.postMessage({ type: 'anilist_auth', token: accessToken }, '*');
+        setTimeout(() => window.close(), 2000);
+      }
+    } else {
+      document.getElementById('icon').textContent = '✕';
+      document.getElementById('icon').className = 'error';
+      document.getElementById('title').textContent = 'Connection Failed';
+      document.getElementById('message').textContent = 'Could not connect to AniList. Please try again.';
+      
+      // Notify parent window of failure
+      if (window.opener) {
+        window.opener.postMessage({ type: 'anilist_auth', error: 'No access token received' }, '*');
+      }
+    }
+  </script>
+</body>
+</html>`;
+      return new Response(oauthHtml, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS_HEADERS }
+      });
+    }
+    
+    // Scrobble endpoint - POST /api/scrobble
+    // Body: { imdbId, season, episode, anilistToken }
+    if (path === '/api/scrobble' && request.method === 'POST') {
+      try {
+        const body = await request.json();
+        const { imdbId, season, episode, anilistToken } = body;
+        
+        if (!imdbId || !episode) {
+          return jsonResponse({ error: 'Missing required fields: imdbId, episode' }, { status: 400 });
+        }
+        
+        if (!anilistToken) {
+          return jsonResponse({ error: 'No AniList token provided. Please connect your AniList account.' }, { status: 401 });
+        }
+        
+        // Get ID mappings from Haglund API
+        const mappings = await getIdMappingsFromImdb(imdbId, season || 1);
+        
+        if (!mappings.anilist) {
+          return jsonResponse({ 
+            error: 'Could not find AniList ID for this anime',
+            imdbId,
+            mappings
+          }, { status: 404 });
+        }
+        
+        // Scrobble to AniList
+        const result = await scrobbleToAnilist(mappings.anilist, episode, anilistToken);
+        
+        return jsonResponse({
+          success: true,
+          service: 'anilist',
+          anilistId: mappings.anilist,
+          ...result
+        });
+      } catch (error) {
+        console.error('Scrobble error:', error);
+        return jsonResponse({ 
+          error: 'Scrobble failed', 
+          message: error.message 
+        }, { status: 500 });
+      }
+    }
+    
+    // Get AniList user info - GET /api/anilist/user
+    if (path === '/api/anilist/user') {
+      const authHeader = request.headers.get('Authorization');
+      const token = authHeader?.replace('Bearer ', '');
+      
+      if (!token) {
+        return jsonResponse({ error: 'No token provided' }, { status: 401 });
+      }
+      
+      const user = await getAnilistCurrentUser(token);
+      if (!user) {
+        return jsonResponse({ error: 'Invalid or expired token' }, { status: 401 });
+      }
+      
+      return jsonResponse({ user });
+    }
+    
+    // MAL OAuth callback page - GET /mal/callback
+    if (path === '/mal/callback' || path.startsWith('/mal/callback?')) {
+      // Return a simple HTML page that will handle the OAuth code
+      const html = `<!DOCTYPE html><html><head><title>MAL Auth</title></head><body>
+        <script>
+          // Pass the query params to the main configure page
+          window.location.href = '/configure' + window.location.search + '&mal_callback=1';
+        </script>
+        <p>Redirecting...</p>
+      </body></html>`;
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS_HEADERS }
+      });
+    }
+    
+    // MAL token exchange - POST /api/mal/token
+    if (path === '/api/mal/token' && request.method === 'POST') {
+      try {
+        const { code, codeVerifier, redirectUri } = await request.json();
+        
+        const MAL_CLIENT_ID = 'e1c53f5d91d73133d628b7e2f56df992';
+        const MAL_CLIENT_SECRET = '8a063b9c3a6f00e8a455ebe1f1b338a742f42e4e0f0b98f18f02e0ec207d4e09';
+        
+        const tokenResponse = await fetch('https://myanimelist.net/v1/oauth2/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: MAL_CLIENT_ID,
+            client_secret: MAL_CLIENT_SECRET,
+            grant_type: 'authorization_code',
+            code: code,
+            code_verifier: codeVerifier,
+            redirect_uri: redirectUri
+          }).toString()
+        });
+        
+        const tokenData = await tokenResponse.json();
+        
+        if (tokenData.error) {
+          return jsonResponse({ error: tokenData.error, message: tokenData.message || tokenData.hint }, { status: 400 });
+        }
+        
+        return jsonResponse(tokenData);
+      } catch (error) {
+        return jsonResponse({ error: 'Token exchange failed', message: error.message }, { status: 500 });
+      }
+    }
+    
+    // Get MAL user info - GET /api/mal/user
+    if (path === '/api/mal/user') {
+      const authHeader = request.headers.get('Authorization');
+      const token = authHeader?.replace('Bearer ', '');
+      
+      if (!token) {
+        return jsonResponse({ error: 'No token provided' }, { status: 401 });
+      }
+      
+      try {
+        const userResponse = await fetch('https://api.myanimelist.net/v2/users/@me', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        
+        if (!userResponse.ok) {
+          return jsonResponse({ error: 'Invalid or expired token' }, { status: 401 });
+        }
+        
+        const userData = await userResponse.json();
+        return jsonResponse({ user: { name: userData.name, id: userData.id } });
+      } catch (error) {
+        return jsonResponse({ error: 'Failed to fetch user', message: error.message }, { status: 500 });
+      }
+    }
+    
+    // Get ID mappings - GET /api/mappings/:imdbId
+    const mappingsMatch = path.match(/^\/api\/mappings\/(tt\d+)(?::(\d+))?$/);
+    if (mappingsMatch) {
+      const [, imdbId, seasonStr] = mappingsMatch;
+      const season = seasonStr ? parseInt(seasonStr) : null;
+      
+      const mappings = await getIdMappingsFromImdb(imdbId, season);
+      return jsonResponse({ imdbId, season, mappings });
+    }
+    
+    // ===== SCROBBLING DEBUG/TEST ENDPOINT =====
+    // Test scrobbling without actually playing content
+    // GET /api/debug/scrobble?uid=al_12345&imdb=tt13159924&season=1&episode=1
+    if (path === '/api/debug/scrobble') {
+      const userId = url.searchParams.get('uid');
+      const imdbId = url.searchParams.get('imdb');
+      const season = parseInt(url.searchParams.get('season') || '1');
+      const episode = parseInt(url.searchParams.get('episode') || '1');
+      const dryRun = url.searchParams.get('dry') !== '0'; // Default to dry run (no actual update)
+      
+      const debug = {
+        userId,
+        imdbId,
+        season,
+        episode,
+        dryRun,
+        steps: [],
+        errors: []
+      };
+      
+      // Step 1: Check user tokens in KV
+      if (!userId) {
+        debug.errors.push('Missing uid parameter');
+        return jsonResponse(debug, { status: 400 });
+      }
+      
+      const userTokens = await getUserTokens(userId, env);
+      if (!userTokens) {
+        debug.steps.push({ step: 'getUserTokens', status: 'FAIL', message: 'No tokens found in KV for this user ID' });
+        debug.errors.push('User tokens not found. Make sure you connected AniList/MAL on configure page.');
+        return jsonResponse(debug);
+      }
+      debug.steps.push({ step: 'getUserTokens', status: 'OK', hasAnilist: !!userTokens.anilistToken, hasMal: !!userTokens.malToken });
+      
+      // Step 2: Get ID mappings from Haglund API
+      if (!imdbId || !imdbId.startsWith('tt')) {
+        debug.errors.push('Missing or invalid imdb parameter (should be like tt13159924)');
+        return jsonResponse(debug, { status: 400 });
+      }
+      
+      const mappings = await getIdMappingsFromImdb(imdbId, season);
+      debug.steps.push({ step: 'getIdMappings', status: 'OK', mappings });
+      
+      if (!mappings.anilist && !mappings.mal) {
+        debug.errors.push('No AniList or MAL ID found for this IMDB. The anime may not be in the mapping database.');
+        return jsonResponse(debug);
+      }
+      
+      // Step 3: Test AniList scrobbling
+      if (userTokens.anilistToken && mappings.anilist) {
+        try {
+          // Get current progress first
+          const progress = await getAnilistProgress(mappings.anilist, userTokens.anilistToken);
+          debug.steps.push({ 
+            step: 'getAnilistProgress', 
+            status: 'OK', 
+            anilistId: mappings.anilist,
+            currentProgress: progress?.mediaListEntry?.progress || 0,
+            currentStatus: progress?.mediaListEntry?.status || 'NOT_ON_LIST',
+            totalEpisodes: progress?.episodes || 'unknown'
+          });
+          
+          if (!dryRun) {
+            // Actually update
+            const result = await scrobbleToAnilist(mappings.anilist, episode, userTokens.anilistToken);
+            debug.steps.push({ step: 'scrobbleToAnilist', status: 'OK', result });
+          } else {
+            debug.steps.push({ step: 'scrobbleToAnilist', status: 'SKIPPED', reason: 'Dry run mode (add ?dry=0 to actually update)' });
+          }
+        } catch (err) {
+          debug.steps.push({ step: 'anilistScrobble', status: 'FAIL', error: err.message });
+          debug.errors.push(`AniList error: ${err.message}`);
+        }
+      } else if (!userTokens.anilistToken) {
+        debug.steps.push({ step: 'anilistScrobble', status: 'SKIPPED', reason: 'No AniList token' });
+      } else {
+        debug.steps.push({ step: 'anilistScrobble', status: 'SKIPPED', reason: 'No AniList ID for this anime' });
+      }
+      
+      // Step 4: Test MAL scrobbling
+      if (userTokens.malToken && mappings.mal) {
+        try {
+          const malStatus = await getMalAnimeStatus(mappings.mal, userTokens.malToken);
+          if (malStatus?.error === 'token_expired') {
+            debug.steps.push({ step: 'getMalStatus', status: 'FAIL', error: 'MAL token expired' });
+            debug.errors.push('MAL token expired. Please reconnect on configure page.');
+          } else {
+            debug.steps.push({ 
+              step: 'getMalStatus', 
+              status: 'OK', 
+              malId: mappings.mal,
+              currentProgress: malStatus?.my_list_status?.num_watched_episodes || 0,
+              currentStatus: malStatus?.my_list_status?.status || 'not_on_list',
+              totalEpisodes: malStatus?.num_episodes || 'unknown'
+            });
+            
+            if (!dryRun) {
+              const result = await scrobbleToMal(mappings.mal, episode, userTokens.malToken, false);
+              debug.steps.push({ step: 'scrobbleToMal', status: 'OK', result });
+            } else {
+              debug.steps.push({ step: 'scrobbleToMal', status: 'SKIPPED', reason: 'Dry run mode' });
+            }
+          }
+        } catch (err) {
+          debug.steps.push({ step: 'malScrobble', status: 'FAIL', error: err.message });
+          debug.errors.push(`MAL error: ${err.message}`);
+        }
+      } else if (!userTokens.malToken) {
+        debug.steps.push({ step: 'malScrobble', status: 'SKIPPED', reason: 'No MAL token' });
+      } else {
+        debug.steps.push({ step: 'malScrobble', status: 'SKIPPED', reason: 'No MAL ID for this anime' });
+      }
+      
+      debug.success = debug.errors.length === 0;
+      debug.summary = debug.success 
+        ? (dryRun ? 'All checks passed! Add ?dry=0 to actually update progress.' : 'Scrobbling completed successfully!')
+        : 'Some errors occurred. Check the errors array.';
+      
+      return jsonResponse(debug);
+    }
+    
+    // ===== USER TOKEN STORAGE API (for scrobbling) =====
+    
+    // Save user tokens - POST /api/user/:userId/tokens
+    const saveTokensMatch = path.match(/^\/api\/user\/([^\/]+)\/tokens$/);
+    if (saveTokensMatch && request.method === 'POST') {
+      const userId = saveTokensMatch[1];
+      
+      // Validate user ID format (al_123 or mal_123)
+      if (!/^(al|mal)_\d+$/.test(userId)) {
+        return jsonResponse({ error: 'Invalid user ID format' }, { status: 400 });
+      }
+      
+      try {
+        const tokens = await request.json();
+        const saved = await saveUserTokens(userId, tokens, env);
+        
+        if (saved) {
+          return jsonResponse({ success: true, userId });
+        } else {
+          return jsonResponse({ error: 'Failed to save tokens (KV not configured)' }, { status: 500 });
+        }
+      } catch (error) {
+        return jsonResponse({ error: 'Failed to save tokens', message: error.message }, { status: 500 });
+      }
+    }
+    
+    // Disconnect service - POST /api/user/:userId/disconnect
+    const disconnectMatch = path.match(/^\/api\/user\/([^\/]+)\/disconnect$/);
+    if (disconnectMatch && request.method === 'POST') {
+      const userId = disconnectMatch[1];
+      
+      try {
+        const body = await request.json();
+        const service = body.service; // 'anilist' or 'mal'
+        
+        // Get existing tokens
+        const tokens = await getUserTokens(userId, env);
+        if (!tokens) {
+          return jsonResponse({ success: true }); // Nothing to disconnect
+        }
+        
+        // Remove the specified service tokens
+        if (service === 'anilist') {
+          delete tokens.anilistToken;
+          delete tokens.anilistUserId;
+          delete tokens.anilistUser;
+        } else if (service === 'mal') {
+          delete tokens.malToken;
+          delete tokens.malUser;
+        }
+        
+        // Save updated tokens
+        await saveUserTokens(userId, tokens, env);
+        return jsonResponse({ success: true });
+      } catch (error) {
+        return jsonResponse({ error: 'Failed to disconnect', message: error.message }, { status: 500 });
       }
     }
     

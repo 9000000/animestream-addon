@@ -1,724 +1,1516 @@
 {
-  "version": "6.0",
-  "generated": "2026-01-18T13:12:19.734Z",
-  "genres": [
-    {
-      "name": "Animation",
-      "count": 6028
-    },
-    {
-      "name": "Comedy",
-      "count": 3499
-    },
-    {
-      "name": "Action",
-      "count": 2866
-    },
-    {
-      "name": "Adventure",
-      "count": 2426
-    },
-    {
-      "name": "Drama",
-      "count": 2262
-    },
-    {
-      "name": "Fantasy",
-      "count": 1795
-    },
-    {
-      "name": "Sci-Fi",
-      "count": 1536
-    },
-    {
-      "name": "Romance",
-      "count": 1129
-    },
-    {
-      "name": "Sci-Fi & Fantasy",
-      "count": 997
-    },
-    {
-      "name": "Action & Adventure",
-      "count": 848
-    },
-    {
-      "name": "School",
-      "count": 790
-    },
-    {
-      "name": "Kids",
-      "count": 727
-    },
-    {
-      "name": "Slice of Life",
-      "count": 714
-    },
-    {
-      "name": "Supernatural",
-      "count": 702
-    },
-    {
-      "name": "Mecha",
-      "count": 666
-    },
-    {
-      "name": "Mystery",
-      "count": 560
-    },
-    {
-      "name": "Magic",
-      "count": 537
-    },
-    {
-      "name": "Historical",
-      "count": 473
-    },
-    {
-      "name": "Ecchi",
-      "count": 418
-    },
-    {
-      "name": "Family",
-      "count": 385
-    },
-    {
-      "name": "Music",
-      "count": 338
-    },
-    {
-      "name": "Super Power",
-      "count": 337
-    },
-    {
-      "name": "Sports",
-      "count": 336
-    },
-    {
-      "name": "Military",
-      "count": 315
-    },
-    {
-      "name": "Horror",
-      "count": 298
-    },
-    {
-      "name": "Space",
-      "count": 288
-    },
-    {
-      "name": "Parody",
-      "count": 217
-    },
-    {
-      "name": "Martial Arts",
-      "count": 209
-    },
-    {
-      "name": "Psychological",
-      "count": 203
-    },
-    {
-      "name": "Harem",
-      "count": 185
-    },
-    {
-      "name": "Demons",
-      "count": 173
-    },
-    {
-      "name": "Crime",
-      "count": 165
-    },
-    {
-      "name": "Friendship",
-      "count": 147
-    },
-    {
-      "name": "Police",
-      "count": 141
-    },
-    {
-      "name": "Game",
-      "count": 132
-    },
-    {
-      "name": "Science Fiction",
-      "count": 128
-    },
-    {
-      "name": "Anime Influenced",
-      "count": 114
-    },
-    {
-      "name": "Mahou Shoujo",
-      "count": 104
-    },
-    {
-      "name": "Thriller",
-      "count": 101
-    },
-    {
-      "name": "Samurai",
-      "count": 82
-    },
-    {
-      "name": "Vampire",
-      "count": 75
-    },
-    {
-      "name": "Short",
-      "count": 61
-    },
-    {
-      "name": "Dementia",
-      "count": 57
-    },
-    {
-      "name": "Sport",
-      "count": 53
-    },
-    {
-      "name": "Shounen Ai",
-      "count": 53
-    },
-    {
-      "name": "Cars",
-      "count": 52
-    },
-    {
-      "name": "History",
-      "count": 42
-    },
-    {
-      "name": "Shoujo Ai",
-      "count": 39
-    },
-    {
-      "name": "Racing",
-      "count": 37
-    },
-    {
-      "name": "War & Politics",
-      "count": 29
-    },
-    {
-      "name": "Yaoi",
-      "count": 21
-    },
-    {
-      "name": "War",
-      "count": 20
-    },
-    {
-      "name": "Food",
-      "count": 19
-    },
-    {
-      "name": "Zombies",
-      "count": 19
-    },
-    {
-      "name": "Gore",
-      "count": 14
-    },
-    {
-      "name": "Medical",
-      "count": 12
-    },
-    {
-      "name": "Workplace",
-      "count": 11
-    },
-    {
-      "name": "Political",
-      "count": 10
-    },
-    {
-      "name": "Gender Bender",
-      "count": 10
-    },
-    {
-      "name": "Biography",
-      "count": 8
-    },
-    {
-      "name": "TV Movie",
-      "count": 8
-    },
-    {
-      "name": "Yuri",
-      "count": 7
-    },
-    {
-      "name": "Doujinshi",
-      "count": 7
-    },
-    {
-      "name": "Documentary",
-      "count": 6
-    },
-    {
-      "name": "Musical",
-      "count": 3
-    },
-    {
-      "name": "Isekai",
-      "count": 2
-    },
-    {
-      "name": "Tragedy",
-      "count": 2
-    },
-    {
-      "name": "Western",
-      "count": 2
-    },
-    {
-      "name": "Soap",
-      "count": 2
-    },
-    {
-      "name": "Youth",
-      "count": 1
-    },
-    {
-      "name": "Mature",
-      "count": 1
-    },
-    {
-      "name": "Law",
-      "count": 1
-    },
-    {
-      "name": "Adult",
-      "count": 1
-    },
-    {
-      "name": "Mahou Shounen",
-      "count": 1
-    },
-    {
-      "name": "Cooking",
-      "count": 1
-    }
-  ],
-  "years": [
-    {
-      "year": 2027,
-      "count": 3
-    },
-    {
-      "year": 2026,
-      "count": 74
-    },
-    {
-      "year": 2025,
-      "count": 236
-    },
-    {
-      "year": 2024,
-      "count": 261
-    },
-    {
-      "year": 2023,
-      "count": 276
-    },
-    {
-      "year": 2022,
-      "count": 266
-    },
-    {
-      "year": 2021,
-      "count": 307
-    },
-    {
-      "year": 2020,
-      "count": 243
-    },
-    {
-      "year": 2019,
-      "count": 269
-    },
-    {
-      "year": 2018,
-      "count": 297
-    },
-    {
-      "year": 2017,
-      "count": 270
-    },
-    {
-      "year": 2016,
-      "count": 308
-    },
-    {
-      "year": 2015,
-      "count": 248
-    },
-    {
-      "year": 2014,
-      "count": 289
-    },
-    {
-      "year": 2013,
-      "count": 231
-    },
-    {
-      "year": 2012,
-      "count": 254
-    },
-    {
-      "year": 2011,
-      "count": 210
-    },
-    {
-      "year": 2010,
-      "count": 191
-    },
-    {
-      "year": 2009,
-      "count": 197
-    },
-    {
-      "year": 2008,
-      "count": 185
-    },
-    {
-      "year": 2007,
-      "count": 202
-    },
-    {
-      "year": 2006,
-      "count": 219
-    },
-    {
-      "year": 2005,
-      "count": 186
-    },
-    {
-      "year": 2004,
-      "count": 158
-    },
-    {
-      "year": 2003,
-      "count": 160
-    },
-    {
-      "year": 2002,
-      "count": 153
-    },
-    {
-      "year": 2001,
-      "count": 136
-    },
-    {
-      "year": 2000,
-      "count": 98
-    },
-    {
-      "year": 1999,
-      "count": 119
-    },
-    {
-      "year": 1998,
-      "count": 110
-    },
-    {
-      "year": 1997,
-      "count": 94
-    },
-    {
-      "year": 1996,
-      "count": 103
-    },
-    {
-      "year": 1995,
-      "count": 93
-    },
-    {
-      "year": 1994,
-      "count": 103
-    },
-    {
-      "year": 1993,
-      "count": 107
-    },
-    {
-      "year": 1992,
-      "count": 107
-    },
-    {
-      "year": 1991,
-      "count": 113
-    },
-    {
-      "year": 1990,
-      "count": 98
-    },
-    {
-      "year": 1989,
-      "count": 106
-    },
-    {
-      "year": 1988,
-      "count": 84
-    },
-    {
-      "year": 1987,
-      "count": 92
-    },
-    {
-      "year": 1986,
-      "count": 90
-    },
-    {
-      "year": 1985,
-      "count": 82
-    },
-    {
-      "year": 1984,
-      "count": 60
-    },
-    {
-      "year": 1983,
-      "count": 63
-    },
-    {
-      "year": 1982,
-      "count": 48
-    },
-    {
-      "year": 1981,
-      "count": 53
-    },
-    {
-      "year": 1980,
-      "count": 45
-    },
-    {
-      "year": 1979,
-      "count": 46
-    },
-    {
-      "year": 1978,
-      "count": 27
-    },
-    {
-      "year": 1977,
-      "count": 30
-    },
-    {
-      "year": 1976,
-      "count": 21
-    },
-    {
-      "year": 1975,
-      "count": 22
-    },
-    {
-      "year": 1974,
-      "count": 22
-    },
-    {
-      "year": 1973,
-      "count": 17
-    },
-    {
-      "year": 1972,
-      "count": 19
-    },
-    {
-      "year": 1971,
-      "count": 12
-    },
-    {
-      "year": 1970,
-      "count": 16
-    },
-    {
-      "year": 1969,
-      "count": 17
-    },
-    {
-      "year": 1968,
-      "count": 20
-    },
-    {
-      "year": 1967,
-      "count": 15
-    },
-    {
-      "year": 1966,
-      "count": 9
-    },
-    {
-      "year": 1965,
-      "count": 10
-    },
-    {
-      "year": 1964,
-      "count": 8
-    },
-    {
-      "year": 1963,
-      "count": 9
-    },
-    {
-      "year": 1962,
-      "count": 4
-    },
-    {
-      "year": 1961,
-      "count": 3
-    },
-    {
-      "year": 1960,
-      "count": 1
-    },
-    {
-      "year": 1959,
-      "count": 4
-    },
-    {
-      "year": 1958,
-      "count": 1
-    },
-    {
-      "year": 1957,
-      "count": 3
-    },
-    {
-      "year": 1956,
-      "count": 3
-    },
-    {
-      "year": 1954,
-      "count": 3
-    },
-    {
-      "year": 1953,
-      "count": 2
-    },
-    {
-      "year": 1952,
-      "count": 1
-    },
-    {
-      "year": 1951,
-      "count": 1
-    },
-    {
-      "year": 1950,
-      "count": 3
-    },
-    {
-      "year": 1949,
-      "count": 3
-    },
-    {
-      "year": 1948,
-      "count": 4
-    },
-    {
-      "year": 1947,
-      "count": 2
-    },
-    {
-      "year": 1946,
-      "count": 3
-    },
-    {
-      "year": 1945,
-      "count": 1
-    },
-    {
-      "year": 1943,
-      "count": 3
-    },
-    {
-      "year": 1942,
-      "count": 5
-    },
-    {
-      "year": 1941,
-      "count": 2
-    },
-    {
-      "year": 1940,
-      "count": 3
-    },
-    {
-      "year": 1939,
-      "count": 2
-    },
-    {
-      "year": 1938,
-      "count": 2
-    },
-    {
-      "year": 1937,
-      "count": 2
-    },
-    {
-      "year": 1936,
-      "count": 10
-    },
-    {
-      "year": 1935,
-      "count": 9
-    },
-    {
-      "year": 1934,
-      "count": 10
-    },
-    {
-      "year": 1933,
-      "count": 11
-    },
-    {
-      "year": 1932,
-      "count": 4
-    },
-    {
-      "year": 1931,
-      "count": 15
-    },
-    {
-      "year": 1930,
-      "count": 4
-    },
-    {
-      "year": 1929,
-      "count": 4
-    },
-    {
-      "year": 1928,
-      "count": 5
-    },
-    {
-      "year": 1927,
-      "count": 3
-    },
-    {
-      "year": 1926,
-      "count": 2
-    },
-    {
-      "year": 1925,
-      "count": 2
-    },
-    {
-      "year": 1924,
-      "count": 4
-    },
-    {
-      "year": 1918,
-      "count": 8
-    },
-    {
-      "year": 1917,
-      "count": 11
-    }
-  ]
+  "genres": {
+    "withCounts": [
+      "Animation (6028)",
+      "Comedy (3537)",
+      "Action (2896)",
+      "Adventure (2450)",
+      "Drama (2269)",
+      "Fantasy (1843)",
+      "Sci-Fi (1544)",
+      "Romance (1137)",
+      "Sci-Fi & Fantasy (997)",
+      "Action & Adventure (848)",
+      "School (802)",
+      "Kids (727)",
+      "Slice of Life (722)",
+      "Supernatural (710)",
+      "Mecha (666)",
+      "Mystery (560)",
+      "Magic (537)",
+      "Historical (484)",
+      "Ecchi (420)",
+      "Family (385)",
+      "Music (346)",
+      "Super Power (341)",
+      "Sports (337)",
+      "Military (315)",
+      "Horror (301)",
+      "Space (290)",
+      "Parody (223)",
+      "Martial Arts (216)",
+      "Psychological (204)",
+      "Harem (191)",
+      "Demons (173)",
+      "Crime (165)",
+      "Friendship (147)",
+      "Police (141)",
+      "Game (132)",
+      "Science Fiction (128)",
+      "Anime Influenced (114)",
+      "Mahou Shoujo (106)",
+      "Thriller (101)",
+      "Samurai (84)",
+      "Vampire (77)",
+      "Hentai (68)",
+      "Short (61)",
+      "Dementia (57)",
+      "Sport (53)",
+      "Shounen Ai (53)",
+      "Cars (52)",
+      "History (42)",
+      "Shoujo Ai (39)",
+      "Racing (38)",
+      "War & Politics (29)",
+      "Yaoi (21)",
+      "War (20)",
+      "Food (19)",
+      "Zombies (19)",
+      "Gore (15)",
+      "Workplace (15)",
+      "Medical (13)",
+      "Political (10)",
+      "Gender Bender (10)",
+      "Isekai (8)",
+      "Biography (8)",
+      "TV Movie (8)",
+      "Yuri (7)",
+      "Doujinshi (7)",
+      "Documentary (6)",
+      "Reincarnation (6)",
+      "Anthropomorphic (6)",
+      "Musical (3)",
+      "Urban Fantasy (3)",
+      "Gourmet (3)",
+      "Educational (3)",
+      "Strategy Game (3)",
+      "Tragedy (2)",
+      "Western (2)",
+      "Soap (2)",
+      "Mythology (2)",
+      "Adult Cast (2)",
+      "Boys Love (2)",
+      "Erotica (2)",
+      "Avant Garde (2)",
+      "Youth (1)",
+      "Mature (1)",
+      "Law (1)",
+      "Adult (1)",
+      "Mahou Shounen (1)",
+      "Cooking (1)",
+      "Showbiz (1)",
+      "Suspense (1)",
+      "Idols (Male) (1)",
+      "Iyashikei (1)",
+      "Performing Arts (1)",
+      "Crossdressing (1)",
+      "Love Polygon (1)",
+      "Girls Love (1)",
+      "Time Travel (1)",
+      "Pets (1)",
+      "Villainess (1)",
+      "Organized Crime (1)",
+      "Gag Humor (1)"
+    ],
+    "list": [
+      {
+        "name": "Animation",
+        "count": 6028
+      },
+      {
+        "name": "Comedy",
+        "count": 3537
+      },
+      {
+        "name": "Action",
+        "count": 2896
+      },
+      {
+        "name": "Adventure",
+        "count": 2450
+      },
+      {
+        "name": "Drama",
+        "count": 2269
+      },
+      {
+        "name": "Fantasy",
+        "count": 1843
+      },
+      {
+        "name": "Sci-Fi",
+        "count": 1544
+      },
+      {
+        "name": "Romance",
+        "count": 1137
+      },
+      {
+        "name": "Sci-Fi & Fantasy",
+        "count": 997
+      },
+      {
+        "name": "Action & Adventure",
+        "count": 848
+      },
+      {
+        "name": "School",
+        "count": 802
+      },
+      {
+        "name": "Kids",
+        "count": 727
+      },
+      {
+        "name": "Slice of Life",
+        "count": 722
+      },
+      {
+        "name": "Supernatural",
+        "count": 710
+      },
+      {
+        "name": "Mecha",
+        "count": 666
+      },
+      {
+        "name": "Mystery",
+        "count": 560
+      },
+      {
+        "name": "Magic",
+        "count": 537
+      },
+      {
+        "name": "Historical",
+        "count": 484
+      },
+      {
+        "name": "Ecchi",
+        "count": 420
+      },
+      {
+        "name": "Family",
+        "count": 385
+      },
+      {
+        "name": "Music",
+        "count": 346
+      },
+      {
+        "name": "Super Power",
+        "count": 341
+      },
+      {
+        "name": "Sports",
+        "count": 337
+      },
+      {
+        "name": "Military",
+        "count": 315
+      },
+      {
+        "name": "Horror",
+        "count": 301
+      },
+      {
+        "name": "Space",
+        "count": 290
+      },
+      {
+        "name": "Parody",
+        "count": 223
+      },
+      {
+        "name": "Martial Arts",
+        "count": 216
+      },
+      {
+        "name": "Psychological",
+        "count": 204
+      },
+      {
+        "name": "Harem",
+        "count": 191
+      },
+      {
+        "name": "Demons",
+        "count": 173
+      },
+      {
+        "name": "Crime",
+        "count": 165
+      },
+      {
+        "name": "Friendship",
+        "count": 147
+      },
+      {
+        "name": "Police",
+        "count": 141
+      },
+      {
+        "name": "Game",
+        "count": 132
+      },
+      {
+        "name": "Science Fiction",
+        "count": 128
+      },
+      {
+        "name": "Anime Influenced",
+        "count": 114
+      },
+      {
+        "name": "Mahou Shoujo",
+        "count": 106
+      },
+      {
+        "name": "Thriller",
+        "count": 101
+      },
+      {
+        "name": "Samurai",
+        "count": 84
+      },
+      {
+        "name": "Vampire",
+        "count": 77
+      },
+      {
+        "name": "Hentai",
+        "count": 68
+      },
+      {
+        "name": "Short",
+        "count": 61
+      },
+      {
+        "name": "Dementia",
+        "count": 57
+      },
+      {
+        "name": "Sport",
+        "count": 53
+      },
+      {
+        "name": "Shounen Ai",
+        "count": 53
+      },
+      {
+        "name": "Cars",
+        "count": 52
+      },
+      {
+        "name": "History",
+        "count": 42
+      },
+      {
+        "name": "Shoujo Ai",
+        "count": 39
+      },
+      {
+        "name": "Racing",
+        "count": 38
+      },
+      {
+        "name": "War & Politics",
+        "count": 29
+      },
+      {
+        "name": "Yaoi",
+        "count": 21
+      },
+      {
+        "name": "War",
+        "count": 20
+      },
+      {
+        "name": "Food",
+        "count": 19
+      },
+      {
+        "name": "Zombies",
+        "count": 19
+      },
+      {
+        "name": "Gore",
+        "count": 15
+      },
+      {
+        "name": "Workplace",
+        "count": 15
+      },
+      {
+        "name": "Medical",
+        "count": 13
+      },
+      {
+        "name": "Political",
+        "count": 10
+      },
+      {
+        "name": "Gender Bender",
+        "count": 10
+      },
+      {
+        "name": "Isekai",
+        "count": 8
+      },
+      {
+        "name": "Biography",
+        "count": 8
+      },
+      {
+        "name": "TV Movie",
+        "count": 8
+      },
+      {
+        "name": "Yuri",
+        "count": 7
+      },
+      {
+        "name": "Doujinshi",
+        "count": 7
+      },
+      {
+        "name": "Documentary",
+        "count": 6
+      },
+      {
+        "name": "Reincarnation",
+        "count": 6
+      },
+      {
+        "name": "Anthropomorphic",
+        "count": 6
+      },
+      {
+        "name": "Musical",
+        "count": 3
+      },
+      {
+        "name": "Urban Fantasy",
+        "count": 3
+      },
+      {
+        "name": "Gourmet",
+        "count": 3
+      },
+      {
+        "name": "Educational",
+        "count": 3
+      },
+      {
+        "name": "Strategy Game",
+        "count": 3
+      },
+      {
+        "name": "Tragedy",
+        "count": 2
+      },
+      {
+        "name": "Western",
+        "count": 2
+      },
+      {
+        "name": "Soap",
+        "count": 2
+      },
+      {
+        "name": "Mythology",
+        "count": 2
+      },
+      {
+        "name": "Adult Cast",
+        "count": 2
+      },
+      {
+        "name": "Boys Love",
+        "count": 2
+      },
+      {
+        "name": "Erotica",
+        "count": 2
+      },
+      {
+        "name": "Avant Garde",
+        "count": 2
+      },
+      {
+        "name": "Youth",
+        "count": 1
+      },
+      {
+        "name": "Mature",
+        "count": 1
+      },
+      {
+        "name": "Law",
+        "count": 1
+      },
+      {
+        "name": "Adult",
+        "count": 1
+      },
+      {
+        "name": "Mahou Shounen",
+        "count": 1
+      },
+      {
+        "name": "Cooking",
+        "count": 1
+      },
+      {
+        "name": "Showbiz",
+        "count": 1
+      },
+      {
+        "name": "Suspense",
+        "count": 1
+      },
+      {
+        "name": "Idols (Male)",
+        "count": 1
+      },
+      {
+        "name": "Iyashikei",
+        "count": 1
+      },
+      {
+        "name": "Performing Arts",
+        "count": 1
+      },
+      {
+        "name": "Crossdressing",
+        "count": 1
+      },
+      {
+        "name": "Love Polygon",
+        "count": 1
+      },
+      {
+        "name": "Girls Love",
+        "count": 1
+      },
+      {
+        "name": "Time Travel",
+        "count": 1
+      },
+      {
+        "name": "Pets",
+        "count": 1
+      },
+      {
+        "name": "Villainess",
+        "count": 1
+      },
+      {
+        "name": "Organized Crime",
+        "count": 1
+      },
+      {
+        "name": "Gag Humor",
+        "count": 1
+      }
+    ]
+  },
+  "weekdays": {
+    "list": [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday"
+    ],
+    "withCounts": [
+      "Monday (7)",
+      "Tuesday (9)",
+      "Wednesday (7)",
+      "Thursday (6)",
+      "Friday (13)",
+      "Saturday (14)",
+      "Sunday (22)"
+    ]
+  },
+  "seasons": {
+    "list": [
+      "Fall 2027",
+      "Spring 2027",
+      "Fall 2026",
+      "Summer 2026",
+      "Spring 2026",
+      "Winter 2026",
+      "Fall 2025",
+      "Summer 2025",
+      "Spring 2025",
+      "Winter 2025",
+      "Fall 2024",
+      "Summer 2024",
+      "Spring 2024",
+      "Winter 2024",
+      "Fall 2023",
+      "Summer 2023",
+      "Spring 2023",
+      "Winter 2023",
+      "Fall 2022",
+      "Summer 2022",
+      "Spring 2022",
+      "Winter 2022",
+      "Fall 2021",
+      "Summer 2021",
+      "Spring 2021",
+      "Winter 2021",
+      "Fall 2020",
+      "Summer 2020",
+      "Spring 2020",
+      "Winter 2020",
+      "Fall 2019",
+      "Summer 2019",
+      "Spring 2019",
+      "Winter 2019",
+      "Fall 2018",
+      "Summer 2018",
+      "Spring 2018",
+      "Winter 2018",
+      "Fall 2017",
+      "Summer 2017",
+      "Spring 2017",
+      "Winter 2017",
+      "Fall 2016",
+      "Summer 2016",
+      "Spring 2016",
+      "Winter 2016",
+      "Fall 2015",
+      "Summer 2015",
+      "Spring 2015",
+      "Winter 2015",
+      "Fall 2014",
+      "Summer 2014",
+      "Spring 2014",
+      "Winter 2014",
+      "Fall 2013",
+      "Summer 2013",
+      "Spring 2013",
+      "Winter 2013",
+      "Fall 2012",
+      "Summer 2012",
+      "Spring 2012",
+      "Winter 2012",
+      "Fall 2011",
+      "Summer 2011",
+      "Spring 2011",
+      "Winter 2011",
+      "Fall 2010",
+      "Summer 2010",
+      "Spring 2010",
+      "Winter 2010",
+      "Fall 2009",
+      "Summer 2009",
+      "Spring 2009",
+      "Winter 2009",
+      "Fall 2008",
+      "Summer 2008",
+      "Spring 2008",
+      "Winter 2008",
+      "Fall 2007",
+      "Summer 2007",
+      "Spring 2007",
+      "Winter 2007",
+      "Fall 2006",
+      "Summer 2006",
+      "Spring 2006",
+      "Winter 2006",
+      "Fall 2005",
+      "Summer 2005",
+      "Spring 2005",
+      "Winter 2005",
+      "Fall 2004",
+      "Summer 2004",
+      "Spring 2004",
+      "Winter 2004",
+      "Fall 2003",
+      "Summer 2003",
+      "Spring 2003",
+      "Winter 2003",
+      "Fall 2002",
+      "Summer 2002",
+      "Spring 2002",
+      "Winter 2002",
+      "Fall 2001",
+      "Summer 2001",
+      "Spring 2001",
+      "Winter 2001",
+      "Fall 2000",
+      "Summer 2000",
+      "Spring 2000",
+      "Winter 2000",
+      "Fall 1999",
+      "Summer 1999",
+      "Spring 1999",
+      "Winter 1999",
+      "Fall 1998",
+      "Summer 1998",
+      "Spring 1998",
+      "Winter 1998",
+      "Fall 1997",
+      "Summer 1997",
+      "Spring 1997",
+      "Winter 1997",
+      "Fall 1996",
+      "Summer 1996",
+      "Spring 1996",
+      "Winter 1996",
+      "Fall 1995",
+      "Summer 1995",
+      "Spring 1995",
+      "Winter 1995",
+      "Fall 1994",
+      "Summer 1994",
+      "Spring 1994",
+      "Winter 1994",
+      "Fall 1993",
+      "Summer 1993",
+      "Spring 1993",
+      "Winter 1993",
+      "Fall 1992",
+      "Summer 1992",
+      "Spring 1992",
+      "Winter 1992",
+      "Fall 1991",
+      "Summer 1991",
+      "Spring 1991",
+      "Winter 1991",
+      "Fall 1990",
+      "Summer 1990",
+      "Spring 1990",
+      "Winter 1990",
+      "Fall 1989",
+      "Summer 1989",
+      "Spring 1989",
+      "Winter 1989",
+      "Fall 1988",
+      "Summer 1988",
+      "Spring 1988",
+      "Winter 1988",
+      "Fall 1987",
+      "Summer 1987",
+      "Spring 1987",
+      "Winter 1987",
+      "Fall 1986",
+      "Summer 1986",
+      "Spring 1986",
+      "Winter 1986",
+      "Fall 1985",
+      "Summer 1985",
+      "Spring 1985",
+      "Winter 1985",
+      "Fall 1984",
+      "Summer 1984",
+      "Spring 1984",
+      "Winter 1984",
+      "Fall 1983",
+      "Summer 1983",
+      "Spring 1983",
+      "Winter 1983",
+      "Fall 1982",
+      "Summer 1982",
+      "Spring 1982",
+      "Winter 1982",
+      "Fall 1981",
+      "Summer 1981",
+      "Spring 1981",
+      "Winter 1981",
+      "Fall 1980",
+      "Summer 1980",
+      "Spring 1980",
+      "Winter 1980",
+      "Fall 1979",
+      "Summer 1979",
+      "Spring 1979",
+      "Winter 1979",
+      "Fall 1978",
+      "Summer 1978",
+      "Spring 1978",
+      "Winter 1978",
+      "Fall 1977",
+      "Summer 1977",
+      "Spring 1977",
+      "Winter 1977",
+      "Fall 1976",
+      "Summer 1976",
+      "Spring 1976",
+      "Winter 1976",
+      "Fall 1975",
+      "Summer 1975",
+      "Spring 1975",
+      "Winter 1975",
+      "Fall 1974",
+      "Summer 1974",
+      "Spring 1974",
+      "Winter 1974",
+      "Fall 1973",
+      "Summer 1973",
+      "Spring 1973",
+      "Winter 1973",
+      "Fall 1972",
+      "Summer 1972",
+      "Spring 1972",
+      "Winter 1972",
+      "Fall 1971",
+      "Summer 1971",
+      "Spring 1971",
+      "Winter 1971",
+      "Fall 1970",
+      "Summer 1970",
+      "Spring 1970",
+      "Winter 1970",
+      "Fall 1969",
+      "Summer 1969",
+      "Spring 1969",
+      "Winter 1969",
+      "Fall 1968",
+      "Summer 1968",
+      "Spring 1968",
+      "Winter 1968",
+      "Fall 1967",
+      "Summer 1967",
+      "Spring 1967",
+      "Winter 1967",
+      "Fall 1966",
+      "Summer 1966",
+      "Spring 1966",
+      "Winter 1966",
+      "Fall 1965",
+      "Summer 1965",
+      "Spring 1965",
+      "Winter 1965",
+      "Summer 1964",
+      "Winter 1964",
+      "Fall 1963",
+      "Summer 1963",
+      "Winter 1963",
+      "Fall 1962",
+      "Summer 1962",
+      "Spring 1962",
+      "Summer 1961",
+      "Spring 1961",
+      "Winter 1961",
+      "Summer 1960",
+      "Fall 1959",
+      "Spring 1959",
+      "Winter 1959",
+      "Fall 1958",
+      "Fall 1957",
+      "Spring 1957",
+      "Winter 1957",
+      "Fall 1956",
+      "Summer 1956",
+      "Spring 1956",
+      "Fall 1954",
+      "Spring 1954",
+      "Winter 1954",
+      "Summer 1953",
+      "Winter 1953",
+      "Fall 1952",
+      "Winter 1951",
+      "Fall 1950",
+      "Winter 1950",
+      "Fall 1949",
+      "Spring 1949",
+      "Fall 1948",
+      "Winter 1948",
+      "Summer 1947",
+      "Winter 1947",
+      "Winter 1946",
+      "Spring 1945",
+      "Summer 1943",
+      "Spring 1943",
+      "Winter 1943",
+      "Summer 1942",
+      "Winter 1942",
+      "Winter 1941",
+      "Summer 1940",
+      "Spring 1940",
+      "Winter 1940",
+      "Summer 1939",
+      "Winter 1939",
+      "Fall 1938",
+      "Spring 1938",
+      "Fall 1937",
+      "Winter 1937",
+      "Fall 1936",
+      "Spring 1936",
+      "Winter 1936",
+      "Fall 1935",
+      "Summer 1935",
+      "Spring 1935",
+      "Winter 1935",
+      "Fall 1934",
+      "Summer 1934",
+      "Spring 1934",
+      "Winter 1934",
+      "Fall 1933",
+      "Spring 1933",
+      "Winter 1933",
+      "Fall 1932",
+      "Winter 1932",
+      "Fall 1931",
+      "Spring 1931",
+      "Winter 1931",
+      "Fall 1930",
+      "Spring 1930",
+      "Winter 1930",
+      "Fall 1929",
+      "Winter 1929",
+      "Summer 1928",
+      "Spring 1928",
+      "Winter 1928",
+      "Fall 1927",
+      "Winter 1927",
+      "Fall 1926",
+      "Winter 1926",
+      "Winter 1925",
+      "Winter 1924",
+      "Summer 1918",
+      "Winter 1918",
+      "Fall 1917",
+      "Summer 1917",
+      "Spring 1917",
+      "Winter 1917"
+    ],
+    "withCounts": [
+      "Fall 2027 (2)",
+      "Spring 2027 (1)",
+      "Fall 2026 (17)",
+      "Summer 2026 (1)",
+      "Spring 2026 (9)",
+      "Winter 2026 (77)",
+      "Fall 2025 (74)",
+      "Summer 2025 (69)",
+      "Spring 2025 (83)",
+      "Winter 2025 (68)",
+      "Fall 2024 (62)",
+      "Summer 2024 (76)",
+      "Spring 2024 (85)",
+      "Winter 2024 (58)",
+      "Fall 2023 (81)",
+      "Summer 2023 (63)",
+      "Spring 2023 (79)",
+      "Winter 2023 (60)",
+      "Fall 2022 (72)",
+      "Summer 2022 (78)",
+      "Spring 2022 (59)",
+      "Winter 2022 (64)",
+      "Fall 2021 (81)",
+      "Summer 2021 (74)",
+      "Spring 2021 (81)",
+      "Winter 2021 (78)",
+      "Fall 2020 (74)",
+      "Summer 2020 (52)",
+      "Spring 2020 (63)",
+      "Winter 2020 (60)",
+      "Fall 2019 (73)",
+      "Summer 2019 (70)",
+      "Spring 2019 (72)",
+      "Winter 2019 (63)",
+      "Fall 2018 (73)",
+      "Summer 2018 (81)",
+      "Spring 2018 (77)",
+      "Winter 2018 (71)",
+      "Fall 2017 (76)",
+      "Summer 2017 (77)",
+      "Spring 2017 (62)",
+      "Winter 2017 (57)",
+      "Fall 2016 (89)",
+      "Summer 2016 (79)",
+      "Spring 2016 (79)",
+      "Winter 2016 (68)",
+      "Fall 2015 (83)",
+      "Summer 2015 (65)",
+      "Spring 2015 (62)",
+      "Winter 2015 (43)",
+      "Fall 2014 (76)",
+      "Summer 2014 (72)",
+      "Spring 2014 (66)",
+      "Winter 2014 (81)",
+      "Fall 2013 (61)",
+      "Summer 2013 (60)",
+      "Spring 2013 (51)",
+      "Winter 2013 (61)",
+      "Fall 2012 (72)",
+      "Summer 2012 (67)",
+      "Spring 2012 (56)",
+      "Winter 2012 (63)",
+      "Fall 2011 (51)",
+      "Summer 2011 (57)",
+      "Spring 2011 (55)",
+      "Winter 2011 (51)",
+      "Fall 2010 (58)",
+      "Summer 2010 (45)",
+      "Spring 2010 (41)",
+      "Winter 2010 (48)",
+      "Fall 2009 (53)",
+      "Summer 2009 (46)",
+      "Spring 2009 (54)",
+      "Winter 2009 (45)",
+      "Fall 2008 (50)",
+      "Summer 2008 (42)",
+      "Spring 2008 (51)",
+      "Winter 2008 (43)",
+      "Fall 2007 (50)",
+      "Summer 2007 (38)",
+      "Spring 2007 (64)",
+      "Winter 2007 (50)",
+      "Fall 2006 (57)",
+      "Summer 2006 (53)",
+      "Spring 2006 (65)",
+      "Winter 2006 (44)",
+      "Fall 2005 (55)",
+      "Summer 2005 (42)",
+      "Spring 2005 (47)",
+      "Winter 2005 (42)",
+      "Fall 2004 (46)",
+      "Summer 2004 (30)",
+      "Spring 2004 (44)",
+      "Winter 2004 (38)",
+      "Fall 2003 (45)",
+      "Summer 2003 (34)",
+      "Spring 2003 (48)",
+      "Winter 2003 (33)",
+      "Fall 2002 (41)",
+      "Summer 2002 (35)",
+      "Spring 2002 (35)",
+      "Winter 2002 (42)",
+      "Fall 2001 (39)",
+      "Summer 2001 (33)",
+      "Spring 2001 (39)",
+      "Winter 2001 (25)",
+      "Fall 2000 (30)",
+      "Summer 2000 (21)",
+      "Spring 2000 (20)",
+      "Winter 2000 (27)",
+      "Fall 1999 (29)",
+      "Summer 1999 (35)",
+      "Spring 1999 (29)",
+      "Winter 1999 (26)",
+      "Fall 1998 (29)",
+      "Summer 1998 (20)",
+      "Spring 1998 (36)",
+      "Winter 1998 (25)",
+      "Fall 1997 (18)",
+      "Summer 1997 (28)",
+      "Spring 1997 (27)",
+      "Winter 1997 (21)",
+      "Fall 1996 (26)",
+      "Summer 1996 (21)",
+      "Spring 1996 (24)",
+      "Winter 1996 (32)",
+      "Fall 1995 (25)",
+      "Summer 1995 (19)",
+      "Spring 1995 (32)",
+      "Winter 1995 (18)",
+      "Fall 1994 (25)",
+      "Summer 1994 (30)",
+      "Spring 1994 (27)",
+      "Winter 1994 (21)",
+      "Fall 1993 (26)",
+      "Summer 1993 (33)",
+      "Spring 1993 (23)",
+      "Winter 1993 (25)",
+      "Fall 1992 (29)",
+      "Summer 1992 (38)",
+      "Spring 1992 (16)",
+      "Winter 1992 (25)",
+      "Fall 1991 (21)",
+      "Summer 1991 (37)",
+      "Spring 1991 (24)",
+      "Winter 1991 (31)",
+      "Fall 1990 (18)",
+      "Summer 1990 (27)",
+      "Spring 1990 (19)",
+      "Winter 1990 (34)",
+      "Fall 1989 (33)",
+      "Summer 1989 (21)",
+      "Spring 1989 (25)",
+      "Winter 1989 (27)",
+      "Fall 1988 (21)",
+      "Summer 1988 (23)",
+      "Spring 1988 (17)",
+      "Winter 1988 (23)",
+      "Fall 1987 (30)",
+      "Summer 1987 (19)",
+      "Spring 1987 (17)",
+      "Winter 1987 (26)",
+      "Fall 1986 (23)",
+      "Summer 1986 (26)",
+      "Spring 1986 (13)",
+      "Winter 1986 (28)",
+      "Fall 1985 (25)",
+      "Summer 1985 (22)",
+      "Spring 1985 (11)",
+      "Winter 1985 (24)",
+      "Fall 1984 (10)",
+      "Summer 1984 (17)",
+      "Spring 1984 (9)",
+      "Winter 1984 (24)",
+      "Fall 1983 (14)",
+      "Summer 1983 (16)",
+      "Spring 1983 (14)",
+      "Winter 1983 (19)",
+      "Fall 1982 (13)",
+      "Summer 1982 (11)",
+      "Spring 1982 (11)",
+      "Winter 1982 (13)",
+      "Fall 1981 (15)",
+      "Summer 1981 (13)",
+      "Spring 1981 (9)",
+      "Winter 1981 (16)",
+      "Fall 1980 (7)",
+      "Summer 1980 (11)",
+      "Spring 1980 (9)",
+      "Winter 1980 (18)",
+      "Fall 1979 (10)",
+      "Summer 1979 (11)",
+      "Spring 1979 (8)",
+      "Winter 1979 (17)",
+      "Fall 1978 (4)",
+      "Summer 1978 (9)",
+      "Spring 1978 (7)",
+      "Winter 1978 (7)",
+      "Fall 1977 (10)",
+      "Summer 1977 (7)",
+      "Spring 1977 (5)",
+      "Winter 1977 (8)",
+      "Fall 1976 (8)",
+      "Summer 1976 (4)",
+      "Spring 1976 (4)",
+      "Winter 1976 (5)",
+      "Fall 1975 (8)",
+      "Summer 1975 (4)",
+      "Spring 1975 (6)",
+      "Winter 1975 (4)",
+      "Fall 1974 (8)",
+      "Summer 1974 (3)",
+      "Spring 1974 (7)",
+      "Winter 1974 (4)",
+      "Fall 1973 (7)",
+      "Summer 1973 (1)",
+      "Spring 1973 (3)",
+      "Winter 1973 (6)",
+      "Fall 1972 (7)",
+      "Summer 1972 (2)",
+      "Spring 1972 (3)",
+      "Winter 1972 (7)",
+      "Fall 1971 (5)",
+      "Summer 1971 (3)",
+      "Spring 1971 (1)",
+      "Winter 1971 (3)",
+      "Fall 1970 (3)",
+      "Summer 1970 (4)",
+      "Spring 1970 (4)",
+      "Winter 1970 (5)",
+      "Fall 1969 (9)",
+      "Summer 1969 (3)",
+      "Spring 1969 (2)",
+      "Winter 1969 (4)",
+      "Fall 1968 (6)",
+      "Summer 1968 (3)",
+      "Spring 1968 (5)",
+      "Winter 1968 (6)",
+      "Fall 1967 (2)",
+      "Summer 1967 (4)",
+      "Spring 1967 (3)",
+      "Winter 1967 (6)",
+      "Fall 1966 (3)",
+      "Summer 1966 (3)",
+      "Spring 1966 (2)",
+      "Winter 1966 (1)",
+      "Fall 1965 (3)",
+      "Summer 1965 (1)",
+      "Spring 1965 (4)",
+      "Winter 1965 (2)",
+      "Summer 1964 (4)",
+      "Winter 1964 (4)",
+      "Fall 1963 (5)",
+      "Summer 1963 (1)",
+      "Winter 1963 (3)",
+      "Fall 1962 (2)",
+      "Summer 1962 (1)",
+      "Spring 1962 (1)",
+      "Summer 1961 (1)",
+      "Spring 1961 (1)",
+      "Winter 1961 (1)",
+      "Summer 1960 (1)",
+      "Fall 1959 (1)",
+      "Spring 1959 (1)",
+      "Winter 1959 (2)",
+      "Fall 1958 (1)",
+      "Fall 1957 (1)",
+      "Spring 1957 (1)",
+      "Winter 1957 (1)",
+      "Fall 1956 (1)",
+      "Summer 1956 (1)",
+      "Spring 1956 (1)",
+      "Fall 1954 (1)",
+      "Spring 1954 (1)",
+      "Winter 1954 (1)",
+      "Summer 1953 (1)",
+      "Winter 1953 (1)",
+      "Fall 1952 (1)",
+      "Winter 1951 (1)",
+      "Fall 1950 (1)",
+      "Winter 1950 (2)",
+      "Fall 1949 (2)",
+      "Spring 1949 (1)",
+      "Fall 1948 (1)",
+      "Winter 1948 (3)",
+      "Summer 1947 (1)",
+      "Winter 1947 (1)",
+      "Winter 1946 (3)",
+      "Spring 1945 (1)",
+      "Summer 1943 (1)",
+      "Spring 1943 (1)",
+      "Winter 1943 (1)",
+      "Summer 1942 (1)",
+      "Winter 1942 (4)",
+      "Winter 1941 (2)",
+      "Summer 1940 (1)",
+      "Spring 1940 (1)",
+      "Winter 1940 (1)",
+      "Summer 1939 (1)",
+      "Winter 1939 (1)",
+      "Fall 1938 (1)",
+      "Spring 1938 (1)",
+      "Fall 1937 (1)",
+      "Winter 1937 (1)",
+      "Fall 1936 (1)",
+      "Spring 1936 (1)",
+      "Winter 1936 (8)",
+      "Fall 1935 (1)",
+      "Summer 1935 (1)",
+      "Spring 1935 (1)",
+      "Winter 1935 (6)",
+      "Fall 1934 (1)",
+      "Summer 1934 (2)",
+      "Spring 1934 (3)",
+      "Winter 1934 (4)",
+      "Fall 1933 (3)",
+      "Spring 1933 (3)",
+      "Winter 1933 (5)",
+      "Fall 1932 (1)",
+      "Winter 1932 (3)",
+      "Fall 1931 (1)",
+      "Spring 1931 (1)",
+      "Winter 1931 (13)",
+      "Fall 1930 (1)",
+      "Spring 1930 (2)",
+      "Winter 1930 (1)",
+      "Fall 1929 (1)",
+      "Winter 1929 (3)",
+      "Summer 1928 (2)",
+      "Spring 1928 (1)",
+      "Winter 1928 (2)",
+      "Fall 1927 (1)",
+      "Winter 1927 (2)",
+      "Fall 1926 (1)",
+      "Winter 1926 (1)",
+      "Winter 1925 (2)",
+      "Winter 1924 (4)",
+      "Summer 1918 (2)",
+      "Winter 1918 (6)",
+      "Fall 1917 (4)",
+      "Summer 1917 (3)",
+      "Spring 1917 (2)",
+      "Winter 1917 (2)"
+    ]
+  },
+  "movieGenres": {
+    "list": [
+      {
+        "name": "Animation",
+        "count": 1516
+      },
+      {
+        "name": "Adventure",
+        "count": 793
+      },
+      {
+        "name": "Action",
+        "count": 791
+      },
+      {
+        "name": "Fantasy",
+        "count": 632
+      },
+      {
+        "name": "Comedy",
+        "count": 631
+      },
+      {
+        "name": "Drama",
+        "count": 607
+      },
+      {
+        "name": "Sci-Fi",
+        "count": 389
+      },
+      {
+        "name": "Kids",
+        "count": 261
+      },
+      {
+        "name": "Romance",
+        "count": 214
+      },
+      {
+        "name": "Family",
+        "count": 199
+      },
+      {
+        "name": "Supernatural",
+        "count": 149
+      },
+      {
+        "name": "Historical",
+        "count": 147
+      },
+      {
+        "name": "Mecha",
+        "count": 146
+      },
+      {
+        "name": "Science Fiction",
+        "count": 128
+      },
+      {
+        "name": "Mystery",
+        "count": 117
+      },
+      {
+        "name": "Slice of Life",
+        "count": 111
+      },
+      {
+        "name": "Military",
+        "count": 101
+      },
+      {
+        "name": "Magic",
+        "count": 99
+      },
+      {
+        "name": "School",
+        "count": 96
+      },
+      {
+        "name": "Super Power",
+        "count": 89
+      },
+      {
+        "name": "Sports",
+        "count": 88
+      },
+      {
+        "name": "Space",
+        "count": 85
+      },
+      {
+        "name": "Horror",
+        "count": 80
+      },
+      {
+        "name": "Music",
+        "count": 75
+      },
+      {
+        "name": "Psychological",
+        "count": 57
+      },
+      {
+        "name": "Friendship",
+        "count": 56
+      },
+      {
+        "name": "Thriller",
+        "count": 42
+      },
+      {
+        "name": "Crime",
+        "count": 41
+      },
+      {
+        "name": "Martial Arts",
+        "count": 41
+      },
+      {
+        "name": "Police",
+        "count": 40
+      },
+      {
+        "name": "Demons",
+        "count": 34
+      },
+      {
+        "name": "Mahou Shoujo",
+        "count": 30
+      },
+      {
+        "name": "History",
+        "count": 27
+      },
+      {
+        "name": "Ecchi",
+        "count": 25
+      },
+      {
+        "name": "Anime Influenced",
+        "count": 24
+      },
+      {
+        "name": "Dementia",
+        "count": 23
+      },
+      {
+        "name": "Parody",
+        "count": 21
+      },
+      {
+        "name": "Samurai",
+        "count": 21
+      },
+      {
+        "name": "War",
+        "count": 20
+      },
+      {
+        "name": "Short",
+        "count": 20
+      },
+      {
+        "name": "Sport",
+        "count": 20
+      },
+      {
+        "name": "Game",
+        "count": 15
+      },
+      {
+        "name": "Cars",
+        "count": 12
+      },
+      {
+        "name": "Vampire",
+        "count": 11
+      },
+      {
+        "name": "Racing",
+        "count": 11
+      },
+      {
+        "name": "Harem",
+        "count": 10
+      },
+      {
+        "name": "Biography",
+        "count": 8
+      },
+      {
+        "name": "TV Movie",
+        "count": 8
+      },
+      {
+        "name": "Shounen Ai",
+        "count": 5
+      },
+      {
+        "name": "Gore",
+        "count": 5
+      },
+      {
+        "name": "Zombies",
+        "count": 5
+      },
+      {
+        "name": "Political",
+        "count": 3
+      },
+      {
+        "name": "Medical",
+        "count": 3
+      },
+      {
+        "name": "Gender Bender",
+        "count": 2
+      },
+      {
+        "name": "Food",
+        "count": 2
+      },
+      {
+        "name": "Documentary",
+        "count": 2
+      },
+      {
+        "name": "Musical",
+        "count": 2
+      },
+      {
+        "name": "Youth",
+        "count": 1
+      }
+    ],
+    "withCounts": [
+      "Animation (1516)",
+      "Adventure (793)",
+      "Action (791)",
+      "Fantasy (632)",
+      "Comedy (631)",
+      "Drama (607)",
+      "Sci-Fi (389)",
+      "Kids (261)",
+      "Romance (214)",
+      "Family (199)",
+      "Supernatural (149)",
+      "Historical (147)",
+      "Mecha (146)",
+      "Science Fiction (128)",
+      "Mystery (117)",
+      "Slice of Life (111)",
+      "Military (101)",
+      "Magic (99)",
+      "School (96)",
+      "Super Power (89)",
+      "Sports (88)",
+      "Space (85)",
+      "Horror (80)",
+      "Music (75)",
+      "Psychological (57)",
+      "Friendship (56)",
+      "Thriller (42)",
+      "Crime (41)",
+      "Martial Arts (41)",
+      "Police (40)",
+      "Demons (34)",
+      "Mahou Shoujo (30)",
+      "History (27)",
+      "Ecchi (25)",
+      "Anime Influenced (24)",
+      "Dementia (23)",
+      "Parody (21)",
+      "Samurai (21)",
+      "War (20)",
+      "Short (20)",
+      "Sport (20)",
+      "Game (15)",
+      "Cars (12)",
+      "Vampire (11)",
+      "Racing (11)",
+      "Harem (10)",
+      "Biography (8)",
+      "TV Movie (8)",
+      "Shounen Ai (5)",
+      "Gore (5)",
+      "Zombies (5)",
+      "Political (3)",
+      "Medical (3)",
+      "Gender Bender (2)",
+      "Food (2)",
+      "Documentary (2)",
+      "Musical (2)",
+      "Youth (1)"
+    ]
+  }
 }

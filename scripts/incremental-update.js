@@ -560,17 +560,39 @@ async function enrichAnime(anime, missing) {
     background: !!cinemeta?.background,
     description: cinemeta?.description?.length > 50,
     cast: cinemeta?.cast?.length > 0,
+    poster: !!cinemeta?.poster,
   };
   
-  // Poster: Kitsu > MAL
+  // CINEMETA-FOCUSED POSTER LOGIC:
+  // Priority: Cinemeta/Metahub > Kitsu > MAL
+  // If Cinemeta has a poster, use it (don't overwrite with Kitsu)
+  // Only use Kitsu/MAL if Cinemeta doesn't have one
   if (missing.poster) {
-    if (kitsu?.posterImage?.large) {
-      const check = await checkPosterUrl(kitsu.posterImage.large);
-      if (check.status === 'ok') enrichment.poster = kitsu.posterImage.large;
+    // First try Cinemeta (Metahub) - the preferred source
+    if (cinemeta?.poster) {
+      const check = await checkPosterUrl(cinemeta.poster);
+      if (check.status === 'ok') {
+        enrichment.poster = cinemeta.poster;
+        log(`Using Cinemeta poster for ${anime.name}`, 'debug');
+      }
     }
+    
+    // If no Cinemeta poster, try Kitsu
+    if (!enrichment.poster && kitsu?.posterImage?.large) {
+      const check = await checkPosterUrl(kitsu.posterImage.large);
+      if (check.status === 'ok') {
+        enrichment.poster = kitsu.posterImage.large;
+        log(`Using Kitsu poster for ${anime.name}`, 'debug');
+      }
+    }
+    
+    // Last resort: MAL
     if (!enrichment.poster && mal?.poster) {
       const check = await checkPosterUrl(mal.poster);
-      if (check.status === 'ok') enrichment.poster = mal.poster;
+      if (check.status === 'ok') {
+        enrichment.poster = mal.poster;
+        log(`Using MAL poster for ${anime.name}`, 'debug');
+      }
     }
   }
   
@@ -999,33 +1021,62 @@ async function runNonAnimeDetection(catalogData) {
 }
 
 async function runMetadataEnrichment(catalogData) {
-  console.log('\n✨ Enriching metadata for incomplete entries...\n');
+  console.log('\n✨ Enriching metadata for currently airing & upcoming anime...\n');
   
-  const airingAnime = catalogData.catalog.filter(a => a.status === 'ONGOING');
+  // Only check currently airing and upcoming anime (not entire catalog)
+  const relevantAnime = catalogData.catalog.filter(a => 
+    a.status === 'ONGOING' || a.status === 'UPCOMING'
+  );
+  
+  log(`Checking ${relevantAnime.length} currently airing/upcoming anime (out of ${catalogData.catalog.length} total)`);
+  
   const needsEnrichment = [];
+  let checked = 0;
   
-  // Analyze all airing anime for missing metadata
-  for (const anime of airingAnime) {
+  // Analyze relevant anime for missing/broken metadata
+  for (const anime of relevantAnime) {
+    checked++;
+    if (checked % 50 === 0) {
+      process.stdout.write(`\rAnalyzing ${checked}/${relevantAnime.length}...`);
+    }
+    
     const { issues, missing } = analyzeMetadata(anime);
     
-    // Check poster URL
+    // Check if poster URL is broken
     if (anime.poster) {
-      const posterStatus = await checkPosterUrl(anime.poster);
-      if (posterStatus.status !== 'ok') {
-        issues.push('broken_poster');
-        missing.poster = true;
+      // Skip valid Metahub posters - they're already the best
+      const isMetahubPoster = anime.poster.includes('images.metahub.space') || 
+                              anime.poster.includes('cinemeta') ||
+                              anime.poster.includes('strem.io');
+      
+      if (isMetahubPoster) {
+        // Metahub posters are reliable, only check if needed
+        const posterStatus = await checkPosterUrl(anime.poster);
+        if (posterStatus.status !== 'ok') {
+          issues.push('broken_metahub_poster');
+          missing.poster = true;
+        }
+      } else {
+        // Non-Metahub posters (Kitsu, etc.) - check if broken
+        const posterStatus = await checkPosterUrl(anime.poster);
+        if (posterStatus.status !== 'ok') {
+          issues.push('broken_poster');
+          missing.poster = true;
+        }
       }
     }
     
-    if (issues.length > 0) {
+    // Only add to enrichment queue if has broken/missing poster
+    if (missing.poster) {
       needsEnrichment.push({ anime, issues, missing });
     }
   }
   
-  log(`Found ${needsEnrichment.length} anime needing enrichment`);
+  console.log('\n');
+  log(`Found ${needsEnrichment.length} anime with broken/missing posters`);
   
   if (needsEnrichment.length === 0) {
-    log('All airing anime have complete metadata', 'success');
+    log('All airing/upcoming anime have working posters', 'success');
     return { posterOverrides: {}, metadataOverrides: {} };
   }
   
@@ -1041,6 +1092,13 @@ async function runMetadataEnrichment(catalogData) {
     
     if (enrichment.poster) {
       posterOverrides[anime.id] = enrichment.poster;
+      
+      // Also update the catalog entry directly
+      const idx = catalogData.catalog.findIndex(a => a.id === anime.id);
+      if (idx !== -1) {
+        catalogData.catalog[idx].poster = enrichment.poster;
+        log(`Updated poster for ${anime.name}`, 'debug');
+      }
     }
     
     if (Object.keys(enrichment.metadata).length > 0) {
@@ -1183,7 +1241,7 @@ async function main() {
       // Add new anime to catalog
       if (results.newAnime && results.newAnime.length > 0) {
         catalogData.catalog.push(...results.newAnime);
-        catalogData.stats.totalAnime = catalogData.catalog.length;
+        catalogData.totalCount = catalogData.catalog.length;
       }
     }
     
@@ -1197,14 +1255,11 @@ async function main() {
       results.enrichment = await runMetadataEnrichment(catalogData);
     }
     
-    // 5. Update filter options (always after any changes)
-    if (results.qualityControl?.statusChanges?.length > 0 ||
-        results.newAnime?.length > 0) {
-      console.log('\n📊 Updating filter options...\n');
-      const updatedFilters = updateFilterOptions(catalogData.catalog, filterOptions);
-      saveFilterOptions(updatedFilters);
-      results.filterOptionsUpdated = true;
-    }
+    // 5. Update filter options (ALWAYS run - keeps counts accurate)
+    console.log('\n📊 Updating filter options...\n');
+    const updatedFilters = updateFilterOptions(catalogData.catalog, filterOptions);
+    saveFilterOptions(updatedFilters);
+    results.filterOptionsUpdated = true;
     
     // Save catalog
     saveCatalog(catalogData);
