@@ -842,6 +842,51 @@ const CONFIGURE_HTML = `<!doctype html>
         </div>
 
         <div>
+          <div class="section-title">RAW Anime + Debrid (NEW!)</div>
+          <div class="help" style="margin-bottom:12px">Enable torrent streams for RAW (unsubtitled) anime with higher quality. Requires a debrid service subscription for instant streaming.</div>
+          
+          <div class="toggles-row" style="margin-bottom:12px">
+            <div>
+              <div id="toggleEnableTorrents" class="toggle-box" role="button" tabindex="0" aria-pressed="true">
+                <input id="enableTorrents" type="checkbox" checked />
+                <div class="label">Enable torrent streams</div>
+              </div>
+              <div class="help">Show RAW torrent options alongside regular streams</div>
+            </div>
+            <div>
+              <div id="togglePreferRaw" class="toggle-box" role="button" tabindex="0" aria-pressed="false">
+                <input id="preferRaw" type="checkbox" />
+                <div class="label">Prefer RAW releases</div>
+              </div>
+              <div class="help">Sort RAW (no subtitles) releases first</div>
+            </div>
+          </div>
+          
+          <div class="scrobble-row">
+            <div>
+              <label>Debrid Provider</label>
+              <select id="debridProvider" class="control">
+                <option value="">None (torrents won't play)</option>
+                <option value="realdebrid">Real-Debrid</option>
+                <option value="alldebrid">AllDebrid</option>
+                <option value="premiumize">Premiumize</option>
+                <option value="torbox">TorBox</option>
+                <option value="debridlink">Debrid-Link</option>
+              </select>
+              <div class="help">Select your debrid service</div>
+            </div>
+            
+            <div>
+              <label>API Key</label>
+              <input id="debridApiKey" type="password" class="control" placeholder="Enter your API key" />
+              <div class="help">Get from your debrid account settings</div>
+            </div>
+          </div>
+          
+          <div id="debridStatus" style="margin-top:8px"></div>
+        </div>
+
+        <div>
           <div class="section-title">Database Stats</div>
           <div id="stats"><span class="stat" id="statTotal">Loading...</span></div>
         </div>
@@ -868,7 +913,7 @@ const CONFIGURE_HTML = `<!doctype html>
     </div>
 
     <div style="text-align:center;margin-top:24px;color:var(--muted);font-size:13px">
-      AnimeStream v1.0.0 • 7,000+ anime from Kitsu with IMDB matching
+      AnimeStream v1.3.0 • 7,000+ anime • RAW + Debrid + Soft Subtitles
     </div>
   </div>
 
@@ -878,7 +923,17 @@ const CONFIGURE_HTML = `<!doctype html>
   (function(){
     'use strict';
     const originHost = window.location.origin;
-    const state = { showCounts: true, excludeLongRunning: false, hiddenCatalogs: [], userId: '' };
+    const state = { 
+      showCounts: true, 
+      excludeLongRunning: false, 
+      hiddenCatalogs: [], 
+      userId: '',
+      // Debrid settings
+      enableTorrents: true,
+      preferRaw: false,
+      debridProvider: '',
+      debridApiKey: ''
+    };
     
     function persist() { localStorage.setItem('animestream_config', JSON.stringify(state)); }
     
@@ -894,6 +949,10 @@ const CONFIGURE_HTML = `<!doctype html>
         if (key === 'excludeLongRunning') state.excludeLongRunning = value === '1';
         if (key === 'hc' && value) state.hiddenCatalogs = value.split(',').filter(c => ['top','season','airing','movies'].includes(c));
         if (key === 'uid' && value) state.userId = value;
+        if (key === 'tor' && value === '0') state.enableTorrents = false;
+        if (key === 'raw' && value === '1') state.preferRaw = true;
+        if (key === 'dp' && value) state.debridProvider = value;
+        if (key === 'dk' && value) state.debridApiKey = decodeURIComponent(value);
       });
       persist();
     }
@@ -914,10 +973,23 @@ const CONFIGURE_HTML = `<!doctype html>
     const toast = $('#toast');
     const anilistStatusEl = $('#anilistStatus');
     
+    // Debrid elements
+    const enableTorrentsEl = $('#enableTorrents');
+    const preferRawEl = $('#preferRaw');
+    const debridProviderEl = $('#debridProvider');
+    const debridApiKeyEl = $('#debridApiKey');
+    const debridStatusEl = $('#debridStatus');
+    
     const CATALOG_NAMES = { top: 'Top Rated', season: 'Season Releases', airing: 'Currently Airing', movies: 'Movies' };
     
     showCountsEl.checked = state.showCounts !== false;
     excludeLongRunningEl.checked = state.excludeLongRunning === true;
+    
+    // Initialize debrid settings
+    if (enableTorrentsEl) enableTorrentsEl.checked = state.enableTorrents !== false;
+    if (preferRawEl) preferRawEl.checked = state.preferRaw === true;
+    if (debridProviderEl) debridProviderEl.value = state.debridProvider || '';
+    if (debridApiKeyEl) debridApiKeyEl.value = state.debridApiKey || '';
     
     function showToast(msg, isError) {
       toast.textContent = msg;
@@ -1259,6 +1331,71 @@ const CONFIGURE_HTML = `<!doctype html>
     checkAnilistConnection();
     checkMalConnection();
     
+    // ===== DEBRID SETTINGS HANDLERS =====
+    function updateDebridStatus() {
+      if (!debridStatusEl) return;
+      
+      if (state.debridProvider && state.debridApiKey) {
+        const providerNames = {
+          realdebrid: 'Real-Debrid',
+          alldebrid: 'AllDebrid',
+          premiumize: 'Premiumize',
+          torbox: 'TorBox',
+          debridlink: 'Debrid-Link'
+        };
+        debridStatusEl.innerHTML = '<div class="scrobble-status">' +
+          '<span class="icon">✓</span>' +
+          '<span>Configured: <span class="user">' + (providerNames[state.debridProvider] || state.debridProvider) + '</span></span>' +
+          '</div>';
+      } else if (state.enableTorrents) {
+        debridStatusEl.innerHTML = '<div class="help" style="color:#f59e0b">⚠️ Torrent streams enabled but no debrid configured. Torrents will show but won\\'t play.</div>';
+      } else {
+        debridStatusEl.innerHTML = '';
+      }
+    }
+    
+    if (enableTorrentsEl) {
+      enableTorrentsEl.onchange = () => {
+        state.enableTorrents = enableTorrentsEl.checked;
+        persist();
+        updateDebridStatus();
+        rerender();
+      };
+      wireToggle('toggleEnableTorrents', enableTorrentsEl);
+    }
+    
+    if (preferRawEl) {
+      preferRawEl.onchange = () => {
+        state.preferRaw = preferRawEl.checked;
+        persist();
+        rerender();
+      };
+      wireToggle('togglePreferRaw', preferRawEl);
+    }
+    
+    if (debridProviderEl) {
+      debridProviderEl.onchange = () => {
+        state.debridProvider = debridProviderEl.value;
+        persist();
+        updateDebridStatus();
+        rerender();
+      };
+    }
+    
+    if (debridApiKeyEl) {
+      debridApiKeyEl.onchange = () => {
+        state.debridApiKey = debridApiKeyEl.value.trim();
+        persist();
+        updateDebridStatus();
+        rerender();
+      };
+      // Also update on blur for better UX
+      debridApiKeyEl.onblur = debridApiKeyEl.onchange;
+    }
+    
+    // Initial debrid status
+    updateDebridStatus();
+    
     function buildConfigPath() {
       const parts = [];
       if (!state.showCounts) parts.push('showCounts=0');
@@ -1266,6 +1403,11 @@ const CONFIGURE_HTML = `<!doctype html>
       if (state.hiddenCatalogs.length > 0) parts.push('hc=' + state.hiddenCatalogs.join(','));
       // Include user ID for scrobbling (tokens stored server-side in KV)
       if (state.userId) parts.push('uid=' + state.userId);
+      // Debrid settings
+      if (!state.enableTorrents) parts.push('tor=0');
+      if (state.preferRaw) parts.push('raw=1');
+      if (state.debridProvider) parts.push('dp=' + state.debridProvider);
+      if (state.debridApiKey) parts.push('dk=' + encodeURIComponent(state.debridApiKey));
       return parts.join('&');
     }
     
@@ -1992,6 +2134,68 @@ function isMetadataIncomplete(meta) {
 }
 
 // ===== DATA FETCHING =====
+
+// ID Mappings cache (for AniDB/MAL/synonyms lookup)
+let idMappingsCache = null;
+let idMappingsCacheTimestamp = 0;
+
+/**
+ * Fetch ID mappings from GitHub (includes AniDB IDs, TVDB season info, synonyms)
+ * Used to enrich anime objects for accurate torrent searching
+ */
+async function fetchIdMappings() {
+  const now = Date.now();
+  
+  // Return cached data if still fresh (1 hour cache)
+  if (idMappingsCache && (now - idMappingsCacheTimestamp) < CACHE_TTL * 1000) {
+    return idMappingsCache;
+  }
+  
+  try {
+    const response = await fetch(`${GITHUB_RAW_BASE}/id-mappings.json?v=${CACHE_BUSTER}`, {
+      cf: { cacheTtl: CACHE_TTL, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch id-mappings: ${response.status}`);
+    }
+    
+    idMappingsCache = await response.json();
+    idMappingsCacheTimestamp = now;
+    
+    console.log(`[fetchIdMappings] Loaded mappings for ${Object.keys(idMappingsCache).length} anime`);
+    
+    return idMappingsCache;
+  } catch (error) {
+    console.error('[fetchIdMappings] Error:', error.message);
+    return idMappingsCache || {};
+  }
+}
+
+/**
+ * Enrich anime object with IDs from id-mappings.json
+ * This adds AniDB ID, synonyms, TVDB season info for accurate torrent searching
+ */
+async function enrichAnimeWithMappings(anime, imdbId) {
+  if (!imdbId) return anime;
+  
+  const mappings = await fetchIdMappings();
+  const mapping = mappings[imdbId];
+  
+  if (!mapping) return anime;
+  
+  // Enrich anime object with mapping data
+  return {
+    ...anime,
+    anidb_id: mapping.adb || anime.anidb_id,
+    mal_id: mapping.mal || anime.mal_id,
+    anilist_id: mapping.al || anime.anilist_id,
+    synonyms: mapping.syn || anime.synonyms || [],
+    tvdb_season: mapping.tvdbS,
+    tvdb_part: mapping.tvdbP,
+    media_type: mapping.type,
+  };
+}
 
 async function fetchCatalogData() {
   const now = Date.now();
@@ -3244,30 +3448,50 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
 // ===== CONFIG PARSING =====
 
 function parseConfig(configStr) {
-  const config = { excludeLongRunning: false, showCounts: true, hiddenCatalogs: [], anilistToken: '', malToken: '', userId: '' };
+  const config = { 
+    excludeLongRunning: false, 
+    showCounts: true, 
+    hiddenCatalogs: [], 
+    anilistToken: '', 
+    malToken: '', 
+    userId: '',
+    // Debrid settings
+    debridProvider: '',
+    debridApiKey: '',
+    // Stream source settings
+    enableTorrents: true,
+    enableAllAnime: true,
+    preferRaw: false,
+    // Subtitle preferences
+    subtitleLanguages: ['en', 'ja']
+  };
   
   if (!configStr) return config;
   
-  // Support concatenated flags (nocountsnolongrunning) and separated formats for backwards compat
-  const decodedConfigStr = decodeURIComponent(configStr).toLowerCase();
+  // Keep original for case-sensitive values, lowercase for flag detection
+  const decodedConfigStr = decodeURIComponent(configStr);
+  const lowerConfigStr = decodedConfigStr.toLowerCase();
   
   // Check for flag presence in the string
-  if (decodedConfigStr.includes('nolongrunning') || decodedConfigStr.includes('excludelongrunning')) {
+  if (lowerConfigStr.includes('nolongrunning') || lowerConfigStr.includes('excludelongrunning')) {
     config.excludeLongRunning = true;
   }
   
   // Support both 'nocounts' and 'hidecounts' (Cloudflare blocks 'nocounts' in URL paths)
-  if (decodedConfigStr.includes('nocounts') || decodedConfigStr.includes('hidecounts')) {
+  if (lowerConfigStr.includes('nocounts') || lowerConfigStr.includes('hidecounts')) {
     config.showCounts = false;
   }
   
-  // Also support old format with separators
+  // Parse key-value pairs (use original string to preserve case for API keys)
   const params = decodedConfigStr.split(/[._|&]/);
   for (const param of params) {
-    const [key, value] = param.split(/[=-]/);
+    const [rawKey, ...valueParts] = param.split(/[=-]/);
+    const key = rawKey.toLowerCase(); // Key is case-insensitive
+    const value = valueParts.join('-'); // Preserve original case for value
     
     if (key === 'showcounts') {
-      config.showCounts = value !== '0' && value !== 'false';
+      const lv = value.toLowerCase();
+      config.showCounts = lv !== '0' && lv !== 'false';
     }
     if (key === 'hc' && value) {
       // Hidden catalogs: comma-separated list (e.g., hc=top,movies)
@@ -3288,6 +3512,33 @@ function parseConfig(configStr) {
     }
     if (key === 'mal' && value) {
       config.malToken = decodeURIComponent(value);
+    }
+    // Debrid settings
+    if (key === 'dp' && value) {
+      // Debrid provider (e.g., dp=realdebrid, dp=alldebrid)
+      const validProviders = Object.keys(DEBRID_PROVIDERS);
+      const lowerValue = value.toLowerCase();
+      if (validProviders.includes(lowerValue)) {
+        config.debridProvider = lowerValue;
+      }
+    }
+    if (key === 'dk' && value) {
+      // Debrid API key (CASE SENSITIVE - AllDebrid keys are case-sensitive!)
+      config.debridApiKey = decodeURIComponent(value);
+    }
+    // Stream source toggles
+    if (key === 'tor' && (value.toLowerCase() === '0' || value.toLowerCase() === 'false')) {
+      config.enableTorrents = false;
+    }
+    if (key === 'aa' && (value.toLowerCase() === '0' || value.toLowerCase() === 'false')) {
+      config.enableAllAnime = false;
+    }
+    if (key === 'raw' && (value.toLowerCase() === '1' || value.toLowerCase() === 'true')) {
+      config.preferRaw = true;
+    }
+    // Subtitle languages
+    if (key === 'slang' && value) {
+      config.subtitleLanguages = value.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
     }
   }
   
@@ -3781,10 +4032,1797 @@ function shouldServeAllAnimeStream(anime, requestedEpisode, requestedSeason, cat
   return { allowed: true, reason: 'all_allowed' };
 }
 
+// ===== PATCH 1.3: RAW ANIME TORRENTS + SOFT SUBTITLES =====
+
+// Torrent cache (5-10 minutes)
+const torrentCache = new Map();
+const TORRENT_CACHE_TTL = 600000; // 10 minutes
+const MAX_TORRENT_CACHE_SIZE = 200;
+
+// Subtitle cache (24 hours)
+const subtitleCache = new Map();
+const SUBTITLE_CACHE_TTL = 86400000; // 24 hours
+const MAX_SUBTITLE_CACHE_SIZE = 500;
+
+// Known RAW release groups (no subtitles)
+const RAW_GROUPS = [
+  'DBD-Raws', 'Reinforce', 'Ohys-Raws', 'Snow-Raws', 
+  'LowPower-Raws', 'U3-Web', 'Moozzi2', 'VCB-Studio',
+  'ASC', 'Cleo', 'LoliHouse', 'Rasetsu', 'Koi-Raws', 'shincaps'
+];
+
+// Anime trackers for better torrent resolution (from Torrentio)
+const ANIME_TRACKERS = [
+  'http://nyaa.tracker.wf:7777/announce',
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://tracker.bittor.pw:1337/announce',
+  'udp://public.popcorn-tracker.org:6969/announce',
+  'udp://tracker.dler.org:6969/announce',
+  'udp://exodus.desync.com:6969/announce',
+  'udp://open.demonii.com:1337/announce',
+  'http://anidex.moe:6969/announce'
+];
+
+/**
+ * Build magnet link with trackers for better resolution
+ */
+function buildMagnetWithTrackers(infoHash, title = '') {
+  const trackerParams = ANIME_TRACKERS.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+  const nameParam = title ? `&dn=${encodeURIComponent(title)}` : '';
+  return `magnet:?xt=urn:btih:${infoHash}${nameParam}${trackerParams}`;
+}
+
+// Quality keywords - also detect resolution format like 1920x1080
+const QUALITY_PATTERNS = {
+  '4K': /4K|2160p|UHD|3840x2160/i,
+  '1080p': /1080p|1920x1080|1440x1080/i,
+  '720p': /720p|1280x720/i,
+  '480p': /480p|DVD|848x480|640x480/i
+};
+
+// Source type detection
+const SOURCE_PATTERNS = {
+  'BD': /BD|Blu-?ray|BDMV|Remux/i,
+  'WEB-DL': /WEB-?DL|AMZN|CR|DSNP/i,
+  'WEBRip': /WEB-?Rip|WEBRip/i,
+  'TV': /HDTV|TV-?Rip|BS11|ANIMAX|AT-X/i
+};
+
+/**
+ * Detect quality from torrent title
+ */
+function detectTorrentQuality(title) {
+  for (const [quality, pattern] of Object.entries(QUALITY_PATTERNS)) {
+    if (pattern.test(title)) return quality;
+  }
+  return 'Unknown';
+}
+
+/**
+ * Detect source type from torrent title
+ */
+function detectSourceType(title) {
+  for (const [source, pattern] of Object.entries(SOURCE_PATTERNS)) {
+    if (pattern.test(title)) return source;
+  }
+  return 'Unknown';
+}
+
+/**
+ * Check if release is RAW (no subtitles)
+ */
+function isRAWRelease(title) {
+  // Check for RAW groups
+  if (RAW_GROUPS.some(g => title.includes(g))) return true;
+  // Check for explicit RAW tags
+  if (/\bRAW\b|生肉/i.test(title)) return true;
+  // Japanese-only indicators
+  if (/\[JPN?\]|\bJapanese\s+Only\b/i.test(title)) return true;
+  return false;
+}
+
+// ===== EPISODE MATCHING SYSTEM =====
+// Robust episode extraction and validation for torrent titles
+// Supports both absolute (E156) and seasonal (S01E05) formats
+
+/**
+ * Extract episode information from a torrent title
+ * Returns: { episode: number|null, season: number|null, isBatch: boolean, batchRange: [start, end]|null }
+ */
+function extractEpisodeInfo(title) {
+  const result = { episode: null, season: null, isBatch: false, batchRange: null };
+  if (!title) return result;
+  
+  // Normalize title for matching
+  const normalized = title.replace(/\s+/g, ' ');
+  
+  // BATCH/SEASON PACK DETECTION - check this first
+  // Patterns like [01-12], (01~12), 01-12 Complete, Batch, etc.
+  // NOTE: Be careful not to match "S2 - 05" or "86 - 03" patterns
+  const batchPatterns = [
+    /[\[\(](\d{1,3})\s*[-~]\s*(\d{1,3})[\]\)]/i,                              // [01-12], (01~12) - MUST have brackets
+    /\b(\d{1,3})\s*[-~]\s*(\d{1,3})\s*(?:END|Complete|Batch|Fin)\b/i,         // 01-12 Complete, 01~24 Batch - requires keyword
+    /\b(?:Complete|Batch|全话|Season\s*Pack)\b/i,                              // Explicit batch keywords
+    /\b(?:Vol(?:ume)?\.?\s*\d+\s*[-~]\s*\d+|BD\s*Box)\b/i,                    // Volume releases, BD Box
+  ];
+  
+  for (const pattern of batchPatterns) {
+    const match = normalized.match(pattern);
+    if (match) {
+      result.isBatch = true;
+      // Extract range if available
+      if (match[1] && match[2]) {
+        const start = parseInt(match[1], 10);
+        const end = parseInt(match[2], 10);
+        if (start < end && end - start < 100) { // Sanity check
+          result.batchRange = [start, end];
+        }
+      }
+      break;
+    }
+  }
+  
+  // If it's a batch without a range, return early - we can't validate specific episodes
+  if (result.isBatch) {
+    return result;
+  }
+  
+  // EPISODE EXTRACTION - from most specific to least specific
+  
+  // Pattern 1: S01E05 / S1E5 format (Western style)
+  const sxeMatch = normalized.match(/\bS0?(\d{1,2})\s*E0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (sxeMatch) {
+    result.season = parseInt(sxeMatch[1], 10);
+    result.episode = parseInt(sxeMatch[2], 10);
+    return result;
+  }
+  
+  // Pattern 2: Anime standard " - 05" or " - 05v2" (e.g., "[SubsPlease] Frieren - 05 (1080p).mkv")
+  const dashEpMatch = normalized.match(/\s-\s0?(\d{1,4})(?:v\d+)?(?:\s|\(|\[|$)/);
+  if (dashEpMatch) {
+    result.episode = parseInt(dashEpMatch[1], 10);
+    return result;
+  }
+  
+  // Pattern 3: Episode 05 / Ep.05 / Ep 5
+  const epWordMatch = normalized.match(/\bE(?:p(?:isode)?)?\.?\s*0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (epWordMatch) {
+    result.episode = parseInt(epWordMatch[1], 10);
+    return result;
+  }
+  
+  // Pattern 4: [05] or (05) - common in older fansub releases
+  const bracketEpMatch = normalized.match(/[\[\(]0?(\d{1,3})(?:v\d+)?[\]\)]/);
+  if (bracketEpMatch) {
+    // Avoid matching resolution like [1080] or years like [2024]
+    const num = parseInt(bracketEpMatch[1], 10);
+    if (num < 1000 && num > 0) {
+      result.episode = num;
+      return result;
+    }
+  }
+  
+  // Pattern 5: "_05_" or ".05." (underscore/dot separated)
+  const sepEpMatch = normalized.match(/[._]0?(\d{1,3})(?:v\d+)?[._]/);
+  if (sepEpMatch) {
+    const num = parseInt(sepEpMatch[1], 10);
+    if (num < 500 && num > 0) { // Sanity check for episode numbers
+      result.episode = num;
+      return result;
+    }
+  }
+  
+  // Pattern 6: #05 or 第05話 (Japanese episode marker)
+  const jpEpMatch = normalized.match(/(?:#|第)0?(\d{1,4})(?:話|回|v\d+)?/);
+  if (jpEpMatch) {
+    result.episode = parseInt(jpEpMatch[1], 10);
+    return result;
+  }
+  
+  return result;
+}
+
+/**
+ * Check if a torrent matches the requested episode
+ * @param {string} title - Torrent title
+ * @param {number} requestedEpisode - Episode number user wants (can be absolute or seasonal)
+ * @param {number} requestedSeason - Season number (1 = first season)
+ * @returns {{ matches: boolean, reason: string, info: object }}
+ */
+function validateTorrentEpisode(title, requestedEpisode, requestedSeason = 1) {
+  const info = extractEpisodeInfo(title);
+  
+  // Batch/season packs are valid - file selection happens at debrid resolution
+  if (info.isBatch) {
+    // If we have a range, validate the episode is within it
+    if (info.batchRange) {
+      const [start, end] = info.batchRange;
+      if (requestedEpisode >= start && requestedEpisode <= end) {
+        return { matches: true, reason: 'batch_contains_episode', info };
+      } else {
+        return { matches: false, reason: 'batch_episode_out_of_range', info };
+      }
+    }
+    // Unknown range - allow it (we'll select file later)
+    return { matches: true, reason: 'batch_unknown_range', info };
+  }
+  
+  // If we couldn't extract episode info, reject (strict mode)
+  if (info.episode === null) {
+    return { matches: false, reason: 'no_episode_detected', info };
+  }
+  
+  // Check for season match if torrent specifies a season
+  if (info.season !== null && info.season !== requestedSeason) {
+    return { matches: false, reason: 'season_mismatch', info };
+  }
+  
+  // Direct episode match
+  if (info.episode === requestedEpisode) {
+    return { matches: true, reason: 'exact_match', info };
+  }
+  
+  // No match
+  return { matches: false, reason: 'episode_mismatch', info };
+}
+
+/**
+ * Filter torrents to only include those matching the requested episode
+ * @param {Array} torrents - Array of torrent objects with 'title' field
+ * @param {number} episode - Requested episode number
+ * @param {number} season - Requested season number
+ * @returns {Array} Filtered torrents with match info
+ */
+function filterTorrentsByEpisode(torrents, episode, season = 1) {
+  const filtered = [];
+  
+  for (const torrent of torrents) {
+    const validation = validateTorrentEpisode(torrent.title, episode, season);
+    
+    if (validation.matches) {
+      // Add match info to torrent for later use (e.g., batch file selection)
+      filtered.push({
+        ...torrent,
+        _episodeInfo: validation.info,
+        _matchReason: validation.reason
+      });
+    } else {
+      console.log(`[Episode Filter] Rejected: "${torrent.title.substring(0, 60)}..." - ${validation.reason} (detected: E${validation.info.episode}${validation.info.season ? ' S' + validation.info.season : ''})`);
+    }
+  }
+  
+  return filtered;
+}
+
+/**
+ * Extract info hash from magnet link
+ */
+function extractInfoHash(magnet) {
+  const match = magnet.match(/urn:btih:([a-fA-F0-9]{40})/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+/**
+ * Parse XML RSS to extract items (simple parser for Cloudflare Workers)
+ */
+function parseRSSItems(xml) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let match;
+  
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const itemXml = match[1];
+    
+    const getTag = (tag) => {
+      const tagMatch = itemXml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+      return tagMatch ? tagMatch[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
+    };
+    
+    // Extract info hash from nyaa:infoHash tag
+    const infoHashTag = getTag('nyaa:infoHash');
+    
+    // Also try to extract from link if it contains magnet
+    let infoHashFromLink = '';
+    const linkContent = getTag('link');
+    if (linkContent) {
+      const magnetMatch = linkContent.match(/urn:btih:([a-fA-F0-9]{40})/i);
+      if (magnetMatch) infoHashFromLink = magnetMatch[1];
+    }
+    
+    items.push({
+      title: getTag('title'),
+      link: linkContent,
+      pubDate: getTag('pubDate'),
+      size: getTag('nyaa:size') || getTag('size'),
+      seeders: parseInt(getTag('nyaa:seeders') || '0'),
+      leechers: parseInt(getTag('nyaa:leechers') || '0'),
+      infoHash: infoHashTag || infoHashFromLink,
+      category: getTag('nyaa:category') || getTag('category')
+    });
+  }
+  
+  return items;
+}
+
+/**
+ * Scrape RAW anime torrents from Nyaa.si
+ * @param {string} animeName - The anime name to search for
+ * @param {number} episode - Optional specific episode number
+ * @returns {Promise<Array>} Array of torrent objects
+ */
+async function scrapeNyaa(animeName, episode = null, season = 1) {
+  const cacheKey = `nyaa:S${season}:${animeName}:${episode || 'all'}`;
+  
+  // Check cache
+  const cached = torrentCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TORRENT_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  // Clean up cache if too large
+  if (torrentCache.size > MAX_TORRENT_CACHE_SIZE) {
+    const entries = Array.from(torrentCache.entries());
+    const toDelete = entries
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, Math.floor(MAX_TORRENT_CACHE_SIZE / 2));
+    toDelete.forEach(([key]) => torrentCache.delete(key));
+  }
+  
+  const torrents = [];
+  
+  try {
+    // Build search queries for anime torrents
+    const episodeQuery = episode ? `${episode}`.padStart(2, '0') : '';
+    const paddedSeason = String(season).padStart(2, '0');
+    const paddedEpisode = episode ? String(episode).padStart(2, '0') : '';
+    
+    // Clean up anime name for better search results
+    // Remove special characters and curly quotes that might break search
+    const cleanName = animeName
+      .replace(/[:'!?""'']/g, '') // Remove punctuation including curly quotes
+      .replace(/\s+/g, ' ')       // Normalize whitespace
+      .trim();
+    
+    // Extract short name for better Nyaa matching
+    // Nyaa titles often use Japanese names or shortened versions
+    // E.g., "Frieren: Beyond Journey's End" -> "Frieren"
+    const shortName = cleanName.split(/[:-]/)[0].replace(/^The\s+/i, '').trim();
+    
+    // Build search queries based on season
+    // For season 1, use simpler queries; for season 2+, include season info
+    let searchQueries;
+    if (season > 1) {
+      // Multi-season show - must include season identifier
+      searchQueries = [
+        `${shortName} S${paddedSeason}E${paddedEpisode}`.trim(),           // S02E03 format
+        `${shortName} Season ${season} ${episodeQuery}`.trim(),            // "Season 2 03" format
+        `${cleanName} S${paddedSeason}E${paddedEpisode}`.trim(),           // Full name S02E03
+      ];
+    } else {
+      // Season 1 - simpler queries (most anime don't explicitly say S01)
+      searchQueries = [
+        `${shortName} ${episodeQuery}`.trim(),                              // Short name (e.g., "Frieren 02")
+        `${cleanName} ${episodeQuery}`.trim(),                              // Full clean name
+        `${shortName} S${paddedSeason}E${paddedEpisode}`.trim(),           // Also try S01E03 format
+      ];
+    }
+    
+    // Remove duplicates
+    const uniqueQueries = [...new Set(searchQueries)].slice(0, 2);
+    
+    for (const query of uniqueQueries) {
+      // Category 1_0 = ALL Anime (includes subbed, raw, everything)
+      // f=0 = no filter, f=2 = trusted uploaders only
+      const url = `https://nyaa.si/?page=rss&q=${encodeURIComponent(query)}&c=1_0&f=0`;
+      
+      console.log(`[Nyaa] Searching: ${url}`);
+      
+      const response = await fetch(url, {
+        headers: buildBrowserHeaders(),
+        cf: { cacheTtl: 300, cacheEverything: true }
+      });
+      
+      if (!response.ok) {
+        console.error(`[Nyaa] Error: ${response.status}`);
+        continue;
+      }
+      
+      const xml = await response.text();
+      const items = parseRSSItems(xml);
+      
+      // If we found results, no need to try other queries
+      if (items.length > 0 && torrents.length === 0) {
+        for (const item of items) {
+          if (!item.title) continue;
+          
+          // Extract magnet link (nyaa puts it in the link or we construct it)
+        let magnet = '';
+        let infoHash = item.infoHash;
+        
+        if (item.link && item.link.includes('magnet:')) {
+          magnet = item.link;
+          infoHash = extractInfoHash(magnet);
+        } else if (infoHash) {
+          magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(item.title)}`;
+        }
+        
+        if (!infoHash) continue;
+        
+        // Detect release info
+        const quality = detectTorrentQuality(item.title);
+        const source = detectSourceType(item.title);
+        const isRaw = isRAWRelease(item.title);
+        
+        // Extract release group
+        const groupMatch = item.title.match(/^\[([^\]]+)\]/);
+        const releaseGroup = groupMatch ? groupMatch[1] : 'Unknown';
+        
+        torrents.push({
+          title: item.title,
+          infoHash: infoHash.toUpperCase(),
+          magnet,
+          quality,
+          source,
+          isRaw,
+          releaseGroup,
+          seeders: item.seeders,
+          size: item.size,
+          pubDate: item.pubDate,
+          provider: 'Nyaa'
+        });
+        }
+      }
+      
+      // If we found results, don't search other queries
+      if (torrents.length > 0) break;
+    }
+    
+    // Sort by seeders (most seeded first) then by quality
+    const qualityOrder = { '4K': 0, '1080p': 1, '720p': 2, '480p': 3, 'Unknown': 4 };
+    torrents.sort((a, b) => {
+      const qualityDiff = qualityOrder[a.quality] - qualityOrder[b.quality];
+      if (qualityDiff !== 0) return qualityDiff;
+      return b.seeders - a.seeders;
+    });
+    
+    // EPISODE VALIDATION: Filter to only torrents matching requested episode
+    let validatedTorrents = torrents;
+    if (episode) {
+      const beforeCount = torrents.length;
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      console.log(`[Nyaa] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
+    }
+    
+    // Cache validated results
+    torrentCache.set(cacheKey, { data: validatedTorrents, timestamp: Date.now() });
+    
+    console.log(`[Nyaa] Found ${validatedTorrents.length} validated torrents for "${animeName}" E${episode || 'all'}`);
+    return validatedTorrents;
+    
+  } catch (error) {
+    console.error(`[Nyaa] Error scraping: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Scrape torrents from AnimeTosho (aggregator)
+ * @param {string} animeName - The anime name to search for
+ * @param {number} episode - Optional specific episode number
+ * @returns {Promise<Array>} Array of torrent objects
+ */
+async function scrapeAnimeTosho(animeName, episode = null, season = 1) {
+  const cacheKey = `tosho:${animeName}:S${season}:${episode || 'all'}`;
+  
+  // Check cache
+  const cached = torrentCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TORRENT_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  const torrents = [];
+  
+  try {
+    // Format episode/season numbers
+    const paddedEpisode = episode ? String(episode).padStart(2, '0') : '';
+    const paddedSeason = String(season).padStart(2, '0');
+    
+    // Build search queries based on season
+    let searchQueries;
+    if (season > 1) {
+      // Multi-season show - must include season identifier
+      searchQueries = [
+        `${animeName} S${paddedSeason}E${paddedEpisode}`.trim(),      // S02E03 format
+        `${animeName} Season ${season} ${paddedEpisode}`.trim(),       // "Season 2 03" format
+      ];
+    } else {
+      // Season 1 - simpler queries
+      searchQueries = [
+        `${animeName} ${paddedEpisode}`.trim(),                        // Simple: "Anime 03"
+        `${animeName} S${paddedSeason}E${paddedEpisode}`.trim(),      // Also try S01E03
+      ];
+    }
+    
+    // Remove duplicates and empty queries
+    const uniqueQueries = [...new Set(searchQueries.filter(q => q.length > 0))];
+    
+    for (const query of uniqueQueries) {
+      const url = `https://feed.animetosho.org/rss2?q=${encodeURIComponent(query)}&filter[0][t]=nyaa_class&filter[0][v]=trusted`;
+    
+      console.log(`[AnimeTosho] Searching: ${url}`);
+    
+      const response = await fetch(url, {
+        headers: buildBrowserHeaders(),
+        cf: { cacheTtl: 300, cacheEverything: true }
+      });
+      
+      if (!response.ok) {
+        console.error(`[AnimeTosho] Error: ${response.status}`);
+        continue; // Try next query instead of returning
+      }
+      
+      const xml = await response.text();
+      const items = parseRSSItems(xml);
+      
+      for (const item of items) {
+        if (!item.title) continue;
+        
+        // AnimeTosho provides magnet in enclosure or link
+        let magnet = '';
+        let infoHash = '';
+        
+        // Try to find torrent hash in the link
+        const hashMatch = item.link.match(/\/([a-f0-9]{40})/i);
+        if (hashMatch) {
+          infoHash = hashMatch[1].toUpperCase();
+          magnet = `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(item.title)}`;
+        }
+        
+        if (!infoHash) continue;
+        
+        // Skip if we already have this torrent (from another query)
+        if (torrents.find(t => t.infoHash === infoHash)) continue;
+        
+        const quality = detectTorrentQuality(item.title);
+        const source = detectSourceType(item.title);
+        const isRaw = isRAWRelease(item.title);
+        
+        const groupMatch = item.title.match(/^\[([^\]]+)\]/);
+        const releaseGroup = groupMatch ? groupMatch[1] : 'Unknown';
+        
+        torrents.push({
+          title: item.title,
+          infoHash,
+          magnet,
+          quality,
+          source,
+          isRaw,
+          releaseGroup,
+          seeders: item.seeders || 0,
+          size: item.size,
+          pubDate: item.pubDate,
+          provider: 'AnimeTosho'
+        });
+      }
+      
+      // If we found results, don't need to try more queries
+      if (torrents.length > 0) break;
+    }
+    
+    // Sort by quality and seeders
+    const qualityOrder = { '4K': 0, '1080p': 1, '720p': 2, '480p': 3, 'Unknown': 4 };
+    torrents.sort((a, b) => {
+      const qualityDiff = qualityOrder[a.quality] - qualityOrder[b.quality];
+      if (qualityDiff !== 0) return qualityDiff;
+      return b.seeders - a.seeders;
+    });
+    
+    // EPISODE VALIDATION: Filter to only torrents matching requested episode
+    let validatedTorrents = torrents;
+    if (episode) {
+      const beforeCount = torrents.length;
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      console.log(`[AnimeTosho] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
+    }
+    
+    // Cache validated results
+    torrentCache.set(cacheKey, { data: validatedTorrents, timestamp: Date.now() });
+    
+    console.log(`[AnimeTosho] Found ${validatedTorrents.length} validated torrents for "${animeName}" E${episode || 'all'}`);
+    return validatedTorrents;
+    
+  } catch (error) {
+    console.error(`[AnimeTosho] Error scraping: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Scrape torrents from AnimeTosho using AniDB ID (most accurate method)
+ * Uses JSON endpoint for structured data with AniDB episode IDs
+ * @param {number} anidbId - The AniDB ID to search for
+ * @param {number} episode - Optional specific episode number
+ * @param {number} season - Season number for multi-season shows
+ * @returns {Promise<Array>} Array of torrent objects
+ */
+async function scrapeAnimeToshoByAniDbId(anidbId, episode = null, season = 1) {
+  if (!anidbId) {
+    console.log('[AnimeTosho-AniDB] No AniDB ID provided');
+    return [];
+  }
+  
+  const cacheKey = `tosho-aid:${anidbId}:S${season}:${episode || 'all'}`;
+  
+  // Check cache
+  const cached = torrentCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < TORRENT_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  const torrents = [];
+  
+  try {
+    // Use JSON endpoint for structured data (includes anidb_eid for exact episode matching!)
+    // The `aid` parameter filters to only torrents for this specific anime
+    const url = `https://feed.animetosho.org/json?aid=${anidbId}`;
+    
+    console.log(`[AnimeTosho-AniDB] Fetching JSON for AniDB ID ${anidbId}`);
+    
+    const response = await fetch(url, {
+      headers: buildBrowserHeaders(),
+      cf: { cacheTtl: 300, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      console.error(`[AnimeTosho-AniDB] Error: ${response.status}`);
+      return [];
+    }
+    
+    const items = await response.json();
+    
+    if (!Array.isArray(items)) {
+      console.error('[AnimeTosho-AniDB] Invalid JSON response');
+      return [];
+    }
+    
+    console.log(`[AnimeTosho-AniDB] Found ${items.length} raw items for AniDB ID ${anidbId}`);
+    
+    for (const item of items) {
+      if (!item.title || !item.info_hash) continue;
+      
+      const infoHash = item.info_hash.toUpperCase();
+      const magnet = item.magnet_uri || `magnet:?xt=urn:btih:${infoHash}&dn=${encodeURIComponent(item.title)}`;
+      
+      const quality = detectTorrentQuality(item.title);
+      const source = detectSourceType(item.title);
+      const isRaw = isRAWRelease(item.title);
+      
+      const groupMatch = item.title.match(/^\[([^\]]+)\]/);
+      const releaseGroup = groupMatch ? groupMatch[1] : 'Unknown';
+      
+      // Format size from bytes
+      let sizeStr = '';
+      if (item.total_size) {
+        const bytes = item.total_size;
+        if (bytes >= 1073741824) sizeStr = `${(bytes / 1073741824).toFixed(2)} GB`;
+        else if (bytes >= 1048576) sizeStr = `${(bytes / 1048576).toFixed(1)} MB`;
+        else sizeStr = `${Math.round(bytes / 1024)} KB`;
+      }
+      
+      torrents.push({
+        title: item.title,
+        infoHash,
+        magnet,
+        quality,
+        source,
+        isRaw,
+        releaseGroup,
+        seeders: item.seeders || 0,
+        leechers: item.leechers || 0,
+        size: sizeStr,
+        totalSize: item.total_size || 0,
+        pubDate: item.timestamp ? new Date(item.timestamp * 1000).toISOString() : null,
+        provider: 'AnimeTosho-AniDB',
+        // AniDB episode ID for exact matching (when available)
+        anidbEpisodeId: item.anidb_eid || null,
+        anidbFileId: item.anidb_fid || null,
+        nyaaId: item.nyaa_id || null,
+      });
+    }
+    
+    // Sort by quality and seeders
+    const qualityOrder = { '4K': 0, '1080p': 1, '720p': 2, '480p': 3, 'Unknown': 4 };
+    torrents.sort((a, b) => {
+      const qualityDiff = qualityOrder[a.quality] - qualityOrder[b.quality];
+      if (qualityDiff !== 0) return qualityDiff;
+      return b.seeders - a.seeders;
+    });
+    
+    // EPISODE VALIDATION: Filter to only torrents matching requested episode
+    let validatedTorrents = torrents;
+    if (episode) {
+      const beforeCount = torrents.length;
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      console.log(`[AnimeTosho-AniDB] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
+    }
+    
+    // Cache validated results
+    torrentCache.set(cacheKey, { data: validatedTorrents, timestamp: Date.now() });
+    
+    console.log(`[AnimeTosho-AniDB] Found ${validatedTorrents.length} validated torrents for AniDB ID ${anidbId} E${episode || 'all'}`);
+    return validatedTorrents;
+    
+  } catch (error) {
+    console.error(`[AnimeTosho-AniDB] Error scraping: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Scrape Nyaa with synonym support for better matching
+ * @param {Array<string>} synonyms - Alternative titles for the anime
+ * @param {number} episode - Optional specific episode number
+ * @param {number} season - Season number
+ * @returns {Promise<Array>} Array of torrent objects
+ */
+async function scrapeNyaaWithSynonyms(synonyms, episode = null, season = 1) {
+  if (!synonyms || synonyms.length === 0) {
+    return [];
+  }
+  
+  const allResults = [];
+  const seenHashes = new Set();
+  
+  // Try each synonym until we find results (max 3 to avoid rate limiting)
+  for (const synonym of synonyms.slice(0, 3)) {
+    if (!synonym || synonym.length < 3) continue;
+    
+    try {
+      const results = await scrapeNyaa(synonym, episode, season);
+      
+      for (const torrent of results) {
+        if (!seenHashes.has(torrent.infoHash)) {
+          seenHashes.add(torrent.infoHash);
+          allResults.push(torrent);
+        }
+      }
+      
+      // If we found results, return them (synonyms are tried in priority order)
+      if (allResults.length > 0) {
+        console.log(`[Nyaa-Synonyms] Found ${allResults.length} torrents using synonym: "${synonym}"`);
+        break;
+      }
+    } catch (error) {
+      console.error(`[Nyaa-Synonyms] Error with "${synonym}": ${error.message}`);
+    }
+  }
+  
+  return allResults;
+}
+
+/**
+ * Get all torrent results for an anime (from multiple sources)
+ * Enhanced version that uses AniDB ID for accurate results when available
+ * 
+ * @param {Object|string} anime - Either anime object with IDs or just the name
+ * @param {number} episode - Optional specific episode number
+ * @param {number} season - Season number (default 1)
+ * @returns {Promise<Array>} Combined and deduplicated torrent results
+ * 
+ * Search priority:
+ * 1. AnimeTosho by AniDB ID (most accurate, 100% reliable when available)
+ * 2. Title-based search on Nyaa and AnimeTosho
+ * 3. Synonym-based search if primary title yields no results
+ */
+async function getTorrentStreams(anime, episode = null, season = 1) {
+  // Handle both old string-based calls and new object-based calls
+  const animeName = typeof anime === 'string' ? anime : 
+    (anime.name || anime.title?.userPreferred || anime.title?.romaji || 'Unknown');
+  const anidbId = typeof anime === 'object' ? (anime.anidb_id || anime.adb) : null;
+  const synonyms = typeof anime === 'object' ? (anime.synonyms || []) : [];
+  
+  console.log(`[TorrentStreams] Searching for "${animeName}" E${episode || 'all'} S${season}${anidbId ? ` (AniDB: ${anidbId})` : ''}`);
+  
+  // Build parallel search tasks
+  const searchTasks = [];
+  
+  // Priority 1: AniDB ID-based search (most accurate)
+  if (anidbId) {
+    searchTasks.push(scrapeAnimeToshoByAniDbId(anidbId, episode, season));
+  }
+  
+  // Priority 2: Title-based search on both Nyaa and AnimeTosho
+  searchTasks.push(scrapeNyaa(animeName, episode, season));
+  searchTasks.push(scrapeAnimeTosho(animeName, episode, season));
+  
+  // Execute all searches in parallel
+  const results = await Promise.all(searchTasks);
+  
+  // Flatten results based on search order
+  let anidbResults = [];
+  let nyaaResults = [];
+  let toshoResults = [];
+  
+  if (anidbId) {
+    anidbResults = results[0] || [];
+    nyaaResults = results[1] || [];
+    toshoResults = results[2] || [];
+  } else {
+    nyaaResults = results[0] || [];
+    toshoResults = results[1] || [];
+  }
+  
+  // Combine and deduplicate by info hash
+  // Priority: AniDB results first (most accurate), then others
+  const seen = new Set();
+  const combined = [];
+  
+  // Add AniDB results first (highest priority)
+  for (const torrent of anidbResults) {
+    if (!seen.has(torrent.infoHash)) {
+      seen.add(torrent.infoHash);
+      combined.push(torrent);
+    }
+  }
+  
+  // Add title-based results
+  for (const torrent of [...nyaaResults, ...toshoResults]) {
+    if (!seen.has(torrent.infoHash)) {
+      seen.add(torrent.infoHash);
+      combined.push(torrent);
+    }
+  }
+  
+  // If no results and we have synonyms, try synonym search
+  if (combined.length === 0 && synonyms.length > 0) {
+    console.log(`[TorrentStreams] No results for primary title, trying ${synonyms.length} synonyms...`);
+    const synonymResults = await scrapeNyaaWithSynonyms(synonyms, episode, season);
+    
+    for (const torrent of synonymResults) {
+      if (!seen.has(torrent.infoHash)) {
+        seen.add(torrent.infoHash);
+        combined.push(torrent);
+      }
+    }
+  }
+  
+  // Re-sort combined results
+  const qualityOrder = { '4K': 0, '1080p': 1, '720p': 2, '480p': 3, 'Unknown': 4 };
+  combined.sort((a, b) => {
+    // RAW releases first
+    if (a.isRaw !== b.isRaw) return a.isRaw ? -1 : 1;
+    // Prefer AniDB results (more accurate)
+    if (a.provider?.includes('AniDB') !== b.provider?.includes('AniDB')) {
+      return a.provider?.includes('AniDB') ? -1 : 1;
+    }
+    const qualityDiff = qualityOrder[a.quality] - qualityOrder[b.quality];
+    if (qualityDiff !== 0) return qualityDiff;
+    return b.seeders - a.seeders;
+  });
+  
+  console.log(`[TorrentStreams] Total: ${combined.length} torrents (AniDB: ${anidbResults.length}, Nyaa: ${nyaaResults.length}, Tosho: ${toshoResults.length})`);
+  
+  return combined;
+}
+
+// ===== DEBRID PROVIDER INTEGRATION =====
+
+const DEBRID_PROVIDERS = {
+  realdebrid: {
+    key: 'realdebrid',
+    name: 'Real-Debrid',
+    shortName: 'RD',
+    apiBaseUrl: 'https://api.real-debrid.com/rest/1.0'
+  },
+  alldebrid: {
+    key: 'alldebrid',
+    name: 'AllDebrid',
+    shortName: 'AD',
+    apiBaseUrl: 'https://api.alldebrid.com/v4'
+  },
+  premiumize: {
+    key: 'premiumize',
+    name: 'Premiumize',
+    shortName: 'PM',
+    apiBaseUrl: 'https://www.premiumize.me/api'
+  },
+  torbox: {
+    key: 'torbox',
+    name: 'TorBox',
+    shortName: 'TB',
+    apiBaseUrl: 'https://api.torbox.app/v1/api'
+  },
+  debridlink: {
+    key: 'debridlink',
+    name: 'Debrid-Link',
+    shortName: 'DL',
+    apiBaseUrl: 'https://debrid-link.com/api/v2'
+  }
+};
+
+// Debrid resolution cache (1-4 hours)
+const debridCache = new Map();
+const DEBRID_CACHE_TTL = 3600000; // 1 hour
+const MAX_DEBRID_CACHE_SIZE = 200;
+
+/**
+ * Check if a torrent is cached on Real-Debrid
+ */
+async function checkRealDebridCache(infoHash, apiKey) {
+  try {
+    const response = await fetch(
+      `https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/${infoHash}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+    );
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    return data[infoHash.toLowerCase()]?.rd?.[0] || null;
+  } catch (error) {
+    console.error(`[RD] Cache check error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Add magnet to Real-Debrid and get download link
+ */
+async function resolveRealDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1) {
+  try {
+    // Step 1: Add magnet
+    const addResponse = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: `magnet=${encodeURIComponent(magnet)}`
+    });
+    
+    if (!addResponse.ok) {
+      throw new Error(`Failed to add magnet: ${addResponse.status}`);
+    }
+    
+    const addData = await addResponse.json();
+    const torrentId = addData.id;
+    
+    // Step 2: Get torrent info
+    const infoResponse = await fetch(
+      `https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+    );
+    
+    if (!infoResponse.ok) {
+      throw new Error(`Failed to get torrent info: ${infoResponse.status}`);
+    }
+    
+    const infoData = await infoResponse.json();
+    
+    // Step 3: Select files (if needed)
+    if (infoData.status === 'waiting_files_selection') {
+      const files = infoData.files || [];
+      const videoFiles = files.filter(f => /\.(mkv|mp4|avi|webm|ts|m2ts)$/i.test(f.path));
+      
+      // Smart file selection for batch torrents using episode extraction
+      let selectedFile = null;
+      
+      if (episode && videoFiles.length > 1) {
+        console.log(`[RD Files] Looking for episode ${episode} in ${videoFiles.length} files...`);
+        
+        const candidates = [];
+        
+        for (const file of videoFiles) {
+          // Skip obvious non-episode files
+          if (/(NCOP|NCED|Preview|Special|SP[^a-z]|OVA|Menu|Trailer|PV|CM|Bonus)/i.test(file.path)) {
+            continue;
+          }
+          
+          // Extract episode info from filename (use path's filename part)
+          const filename = file.path.split('/').pop();
+          const info = extractEpisodeInfo(filename);
+          
+          if (info.episode === episode) {
+            // Check season if specified in filename
+            if (info.season !== null && info.season !== season) {
+              continue;
+            }
+            candidates.push({ file, info });
+            console.log(`[RD Files] Match: ${filename} (E${info.episode})`);
+          }
+        }
+        
+        // Select best candidate by file size
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => b.file.bytes - a.file.bytes);
+          selectedFile = candidates[0].file;
+          console.log(`[RD Files] Selected: ${selectedFile.path}`);
+        }
+      }
+      
+      // Fallback to specified index or largest video file
+      if (!selectedFile) {
+        const sortedBySize = [...videoFiles].sort((a, b) => b.bytes - a.bytes);
+        selectedFile = videoFiles[fileIndex] || sortedBySize[0];
+      }
+      
+      if (!selectedFile) {
+        throw new Error('No video files found in torrent');
+      }
+      
+      await fetch(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrentId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `files=${selectedFile.id}`
+      });
+      
+      // Wait for processing
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    
+    // Step 4: Get updated info with links
+    const finalResponse = await fetch(
+      `https://api.real-debrid.com/rest/1.0/torrents/info/${torrentId}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+    );
+    
+    const finalData = await finalResponse.json();
+    
+    if (finalData.links && finalData.links.length > 0) {
+      // Step 5: Unrestrict the link
+      const unrestrictResponse = await fetch('https://api.real-debrid.com/rest/1.0/unrestrict/link', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `link=${encodeURIComponent(finalData.links[0])}`
+      });
+      
+      const unrestrictData = await unrestrictResponse.json();
+      return unrestrictData.download || null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`[RD] Resolve error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Check if torrents are cached on AllDebrid (batch check via magnet/upload)
+ * AllDebrid returns ready=true if torrent is already cached
+ * @param {string[]} infoHashes - Array of info hashes to check
+ * @param {string} apiKey - AllDebrid API key
+ * @returns {Promise<Map<string, boolean>>} - Map of infoHash -> cached status
+ */
+async function checkAllDebridCacheBatch(infoHashes, apiKey) {
+  const results = new Map();
+  
+  try {
+    // AllDebrid magnet/upload accepts multiple magnets and returns ready status
+    const magnetsParam = infoHashes.map(h => `magnets[]=${h}`).join('&');
+    const response = await fetch(
+      `https://api.alldebrid.com/v4/magnet/upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: magnetsParam
+      }
+    );
+    
+    if (!response.ok) {
+      console.error(`[AD] Cache check failed: ${response.status}`);
+      infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+      return results;
+    }
+    
+    const data = await response.json();
+    
+    // Check for API errors
+    if (data.status === 'error') {
+      console.error(`[AD] API error: ${data.error?.code} - ${data.error?.message}`);
+      infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+      return results;
+    }
+    
+    const magnets = data.data?.magnets || [];
+    console.log(`[AD] Cache check returned ${magnets.length} results`);
+    
+    // Process results and delete non-cached magnets to not clutter user's account
+    for (const magnet of magnets) {
+      const hash = magnet.hash?.toLowerCase();
+      if (hash) {
+        results.set(hash, magnet.ready === true);
+        
+        // If not cached (ready=false), delete the magnet to clean up
+        if (!magnet.ready && magnet.id) {
+          // Fire and forget - don't await
+          fetch(`https://api.alldebrid.com/v4/magnet/delete`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `id=${magnet.id}`
+          }).catch(() => {});
+        }
+      }
+    }
+    
+    // Mark any missing hashes as unknown
+    infoHashes.forEach(h => {
+      if (!results.has(h.toLowerCase())) {
+        results.set(h.toLowerCase(), null);
+      }
+    });
+    
+    return results;
+  } catch (error) {
+    console.error(`[AD] Cache check error: ${error.message}`);
+    infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+    return results;
+  }
+}
+
+/**
+ * Check if torrents are cached on Real-Debrid (batch check)
+ * @param {string[]} infoHashes - Array of info hashes to check
+ * @param {string} apiKey - Real-Debrid API key
+ * @returns {Promise<Map<string, boolean>>} - Map of infoHash -> cached status
+ */
+async function checkRealDebridCacheBatch(infoHashes, apiKey) {
+  const results = new Map();
+  
+  try {
+    // Real-Debrid instant availability accepts multiple hashes separated by /
+    const hashesPath = infoHashes.join('/');
+    const response = await fetch(
+      `https://api.real-debrid.com/rest/1.0/torrents/instantAvailability/${hashesPath}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+    );
+    
+    if (!response.ok) {
+      console.error(`[RD] Cache check failed: ${response.status}`);
+      infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+      return results;
+    }
+    
+    const data = await response.json();
+    
+    // Real-Debrid returns { "hash": { "rd": [...] } } for cached torrents
+    for (const hash of infoHashes) {
+      const lowerHash = hash.toLowerCase();
+      const cached = data[lowerHash]?.rd && data[lowerHash].rd.length > 0;
+      results.set(lowerHash, cached);
+    }
+    
+    return results;
+  } catch (error) {
+    console.error(`[RD] Cache check error: ${error.message}`);
+    infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+    return results;
+  }
+}
+
+/**
+ * Check cache status for multiple torrents on the configured debrid provider
+ * @param {string[]} infoHashes - Array of info hashes
+ * @param {string} provider - Debrid provider key
+ * @param {string} apiKey - API key
+ * @returns {Promise<Map<string, boolean|null>>} - Map of hash -> cached (true/false/null for unknown)
+ */
+async function checkDebridCacheBatch(infoHashes, provider, apiKey) {
+  if (!infoHashes.length || !provider || !apiKey) {
+    return new Map();
+  }
+  
+  switch (provider) {
+    case 'alldebrid':
+      return checkAllDebridCacheBatch(infoHashes, apiKey);
+    case 'realdebrid':
+      return checkRealDebridCacheBatch(infoHashes, apiKey);
+    // TODO: Add other providers
+    default:
+      // Unknown provider - return all as unknown
+      const results = new Map();
+      infoHashes.forEach(h => results.set(h.toLowerCase(), null));
+      return results;
+  }
+}
+
+/**
+ * Add magnet to AllDebrid and get download link
+ * IMPROVED: Fail fast for non-cached torrents, better magnet handling
+ */
+async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1) {
+  try {
+    console.log(`[AD Resolve] Starting resolution for magnet${episode ? ` (looking for S${season}E${episode})` : ''}`);
+    
+    // Step 1: Upload magnet (POST method)
+    const uploadResponse = await fetch(
+      `https://api.alldebrid.com/v4/magnet/upload`,
+      { 
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `magnets[]=${encodeURIComponent(magnet)}`
+      }
+    );
+    
+    if (!uploadResponse.ok) {
+      throw new Error(`Failed to upload magnet: ${uploadResponse.status}`);
+    }
+    
+    const uploadData = await uploadResponse.json();
+    console.log(`[AD Resolve] Upload response: ${JSON.stringify(uploadData).substring(0, 200)}`);
+    
+    if (uploadData.status === 'error') {
+      throw new Error(`AllDebrid error: ${uploadData.error?.message || 'Unknown'}`);
+    }
+    
+    const magnetInfo = uploadData.data?.magnets?.[0];
+    
+    // Check for magnet-level errors
+    if (magnetInfo?.error) {
+      throw new Error(`AllDebrid magnet error: ${magnetInfo.error.message || magnetInfo.error.code || 'Unknown'}`);
+    }
+    
+    const magnetId = magnetInfo?.id;
+    
+    if (!magnetId) {
+      throw new Error('Failed to get magnet ID');
+    }
+    
+    // If already ready (cached), get files directly - FAST PATH
+    if (magnetInfo.ready === true) {
+      console.log(`[AD Resolve] Magnet already cached, getting files`);
+      return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season);
+    }
+    
+    // NOT CACHED - Let AllDebrid download it and poll for completion
+    console.log(`[AD Resolve] Torrent NOT cached - starting download on AllDebrid`);
+    
+    // Step 2: Wait for processing using v4.1 endpoint (POST method)
+    // Poll every 2 seconds for up to 60 seconds (30 attempts)
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    while (attempts < maxAttempts) {
+      await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds between checks
+      attempts++;
+      
+      console.log(`[AD Resolve] Checking download status ${attempts}/${maxAttempts}`);
+      
+      const statusResponse = await fetch(
+        `https://api.alldebrid.com/v4.1/magnet/status`,
+        { 
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: `id=${magnetId}`
+        }
+      );
+      
+      const statusData = await statusResponse.json();
+      
+      if (statusData.status === 'error') {
+        console.error(`[AD Resolve] Status error: ${statusData.error?.message}`);
+        continue; // Try again
+      }
+      
+      // v4.1 returns magnets as object not array when querying single ID
+      const magnetStatus = statusData.data?.magnets;
+      const statusCode = magnetStatus?.statusCode;
+      const status = magnetStatus?.status;
+      
+      console.log(`[AD Resolve] Status: ${status} (code: ${statusCode})`);
+      
+      // Status 4 = Ready
+      if (statusCode === 4) {
+        console.log(`[AD Resolve] Download complete! Getting files...`);
+        return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season);
+      }
+      
+      // Status >= 5 = Error
+      if (statusCode >= 5) {
+        console.error(`[AD Resolve] Download failed with status: ${status}`);
+        return { status: 'error', message: `Download failed: ${status}` };
+      }
+      
+      // Status 0-3 = Still downloading, show progress
+      if (magnetStatus?.downloaded && magnetStatus?.size) {
+        const progress = Math.round((magnetStatus.downloaded / magnetStatus.size) * 100);
+        console.log(`[AD Resolve] Downloading: ${progress}%`);
+      }
+    }
+    
+    // Timeout - torrent is still downloading but taking too long
+    console.log(`[AD Resolve] Timeout waiting for download - still in progress on AllDebrid`);
+    return { status: 'downloading', message: 'Download started on AllDebrid but taking a while. Check your AllDebrid account or try a cached ⚡ torrent.' };
+  } catch (error) {
+    console.error(`[AD Resolve] Error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Get files from AllDebrid magnet and unlock the video link
+ * Implements smart file selection for batch torrents based on episode number
+ */
+async function getAllDebridFiles(magnetId, apiKey, fileIndex = 0, episode = null, season = 1) {
+  try {
+    // Get files using /magnet/files endpoint
+    const filesResponse = await fetch(
+      `https://api.alldebrid.com/v4/magnet/files`,
+      { 
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `id[]=${magnetId}`
+      }
+    );
+    
+    const filesData = await filesResponse.json();
+    console.log(`[AD Files] Response: ${JSON.stringify(filesData).substring(0, 500)}`);
+    
+    if (filesData.status === 'error') {
+      throw new Error(`Files error: ${filesData.error?.message || 'Unknown'}`);
+    }
+    
+    const magnetFiles = filesData.data?.magnets?.[0]?.files || [];
+    
+    // Flatten the file tree and find video files
+    const videoFiles = [];
+    function extractFiles(items) {
+      for (const item of items) {
+        if (item.e) {
+          // It's a folder, recurse
+          extractFiles(item.e);
+        } else if (item.l && /\.(mkv|mp4|avi|webm|ts|m2ts)$/i.test(item.n)) {
+          // It's a video file with a link
+          videoFiles.push({ filename: item.n, size: item.s || 0, link: item.l });
+        }
+      }
+    }
+    extractFiles(magnetFiles);
+    
+    console.log(`[AD Files] Found ${videoFiles.length} video files`);
+    
+    if (videoFiles.length === 0) {
+      throw new Error('No video files found in torrent');
+    }
+    
+    // Smart file selection when episode is specified and there are multiple files
+    let selectedFile = null;
+    
+    if (episode && videoFiles.length > 1) {
+      console.log(`[AD Files] Looking for episode ${episode} in ${videoFiles.length} files...`);
+      
+      // Use the episode extraction system for accurate file matching
+      const candidates = [];
+      
+      for (const file of videoFiles) {
+        // Skip obvious non-episode files
+        if (/(NCOP|NCED|Preview|Special|SP[^a-z]|OVA|Menu|Trailer|PV|CM|Bonus)/i.test(file.filename)) {
+          console.log(`[AD Files] Skipping non-episode: ${file.filename}`);
+          continue;
+        }
+        
+        // Extract episode info from filename
+        const info = extractEpisodeInfo(file.filename);
+        
+        if (info.episode === episode) {
+          // Check season if specified in filename
+          if (info.season !== null && info.season !== season) {
+            console.log(`[AD Files] Season mismatch: ${file.filename} (S${info.season} != S${season})`);
+            continue;
+          }
+          
+          candidates.push({ file, info, exactMatch: true });
+          console.log(`[AD Files] Exact match: ${file.filename} (E${info.episode})`);
+        }
+      }
+      
+      // Select best candidate (prefer exact matches, then by file size)
+      if (candidates.length > 0) {
+        // Sort by size descending (prefer larger files = higher quality)
+        candidates.sort((a, b) => b.file.size - a.file.size);
+        selectedFile = candidates[0].file;
+        console.log(`[AD Files] Selected: ${selectedFile.filename}`);
+      } else {
+        // STRICT MODE: No fallback to position-based selection
+        // This prevents wrong episode selection in batch torrents
+        console.log(`[AD Files] WARNING: No file matched episode ${episode} - will use largest file`);
+      }
+    }
+    
+    // Fallback to specified index or largest file
+    if (!selectedFile) {
+      selectedFile = videoFiles[fileIndex] || videoFiles.sort((a, b) => b.size - a.size)[0];
+    }
+    
+    console.log(`[AD Files] Selected: ${selectedFile.filename}`);
+    
+    // Unlock the link (POST method)
+    const unlockResponse = await fetch(
+      `https://api.alldebrid.com/v4/link/unlock`,
+      { 
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: `link=${encodeURIComponent(selectedFile.link)}`
+      }
+    );
+    
+    const unlockData = await unlockResponse.json();
+    console.log(`[AD Unlock] Response: ${JSON.stringify(unlockData).substring(0, 300)}`);
+    
+    if (unlockData.status === 'error') {
+      throw new Error(`Unlock error: ${unlockData.error?.message || 'Unknown'}`);
+    }
+    
+    return unlockData.data?.link || null;
+  } catch (error) {
+    console.error(`[AD Files] Error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Resolve magnet to direct link using configured debrid provider
+ */
+async function resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex = 0, episode = null, season = 1) {
+  // Include episode in cache key for batch torrents
+  const cacheKey = `debrid:${provider}:${infoHash}:${episode || 'all'}`;
+  
+  // Check cache (only cache successful URL strings, not status objects)
+  const cached = debridCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < DEBRID_CACHE_TTL && typeof cached.data === 'string') {
+    return cached.data;
+  }
+  
+  // Clean up cache if too large
+  if (debridCache.size > MAX_DEBRID_CACHE_SIZE) {
+    const entries = Array.from(debridCache.entries());
+    const toDelete = entries
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, Math.floor(MAX_DEBRID_CACHE_SIZE / 2));
+    toDelete.forEach(([key]) => debridCache.delete(key));
+  }
+  
+  let result = null;
+  
+  switch (provider) {
+    case 'realdebrid':
+      result = await resolveRealDebrid(magnet, apiKey, fileIndex, episode, season);
+      break;
+    case 'alldebrid':
+      result = await resolveAllDebrid(magnet, apiKey, fileIndex, episode, season);
+      break;
+    // Add more providers as needed
+    default:
+      console.error(`[Debrid] Unknown provider: ${provider}`);
+  }
+  
+  // Only cache successful URL strings, not status objects
+  if (result && typeof result === 'string') {
+    debridCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  }
+  
+  return result;
+}
+
+/**
+ * Build play URL for debrid resolution (click-time resolution)
+ */
+function buildDebridPlayUrl(baseUrl, infoHash, magnet, provider, apiKey, fileIndex = 0) {
+  const params = new URLSearchParams({
+    ih: infoHash,
+    p: provider,
+    idx: String(fileIndex)
+  });
+  
+  // Don't include API key in URL - it will be pulled from user config
+  return `${baseUrl}/debrid/play?${params.toString()}`;
+}
+
+// ===== SOFT SUBTITLE INTEGRATION =====
+
+/**
+ * Scrape subtitles from Kitsunekko (Japanese/English anime subs)
+ * @param {string} animeName - The anime name to search for
+ * @returns {Promise<Array>} Array of subtitle objects
+ */
+async function scrapeKitsunekko(animeName) {
+  const cacheKey = `kitsunekko:${animeName}`;
+  
+  // Check cache
+  const cached = subtitleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SUBTITLE_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  // Clean up cache if too large
+  if (subtitleCache.size > MAX_SUBTITLE_CACHE_SIZE) {
+    const entries = Array.from(subtitleCache.entries());
+    const toDelete = entries
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, Math.floor(MAX_SUBTITLE_CACHE_SIZE / 2));
+    toDelete.forEach(([key]) => subtitleCache.delete(key));
+  }
+  
+  const subtitles = [];
+  
+  try {
+    // Kitsunekko directory listing
+    const cleanName = animeName.replace(/[^\w\s]/g, '').replace(/\s+/g, '_');
+    const url = `https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F${encodeURIComponent(cleanName)}%2F`;
+    
+    console.log(`[Kitsunekko] Searching: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: buildBrowserHeaders(),
+      cf: { cacheTtl: 3600, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      // Try alternate path formats
+      return [];
+    }
+    
+    const html = await response.text();
+    
+    // Parse directory listing for subtitle files
+    const fileRegex = /href="([^"]+\.(ass|srt|ssa|sub))"[^>]*>([^<]+)</gi;
+    let match;
+    
+    while ((match = fileRegex.exec(html)) !== null) {
+      const filename = match[3];
+      const filePath = match[1];
+      const ext = match[2].toLowerCase();
+      
+      // Detect episode from filename
+      const epMatch = filename.match(/(?:ep?|episode|e)(\d+)/i) || filename.match(/(\d{2,3})/);
+      const episode = epMatch ? parseInt(epMatch[1]) : null;
+      
+      // Detect language
+      const isJapanese = /\[JP\]|\[JPN\]|japanese|日本語/i.test(filename);
+      const lang = isJapanese ? 'jpn' : 'eng';
+      
+      subtitles.push({
+        id: `kitsunekko-${lang}-${filename.replace(/\W/g, '')}`,
+        url: `https://kitsunekko.net${filePath.startsWith('/') ? '' : '/'}${filePath}`,
+        lang,
+        episode,
+        filename,
+        format: ext,
+        provider: 'Kitsunekko'
+      });
+    }
+    
+    // Cache results
+    subtitleCache.set(cacheKey, { data: subtitles, timestamp: Date.now() });
+    
+    console.log(`[Kitsunekko] Found ${subtitles.length} subtitles for "${animeName}"`);
+    return subtitles;
+    
+  } catch (error) {
+    console.error(`[Kitsunekko] Error: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Search subtitles from OpenSubtitles API
+ * @param {string} imdbId - IMDB ID (tt1234567)
+ * @param {number} season - Season number
+ * @param {number} episode - Episode number
+ * @param {Array} languages - Array of language codes (e.g., ['en', 'ja'])
+ * @returns {Promise<Array>} Array of subtitle objects
+ */
+async function searchOpenSubtitles(imdbId, season, episode, languages = ['en']) {
+  const cacheKey = `opensubs:${imdbId}:${season}:${episode}:${languages.join(',')}`;
+  
+  // Check cache
+  const cached = subtitleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SUBTITLE_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  const subtitles = [];
+  
+  try {
+    // OpenSubtitles requires API key - check if configured
+    // For now, use public (limited) endpoint
+    const url = `https://rest.opensubtitles.org/search/imdbid-${imdbId.replace('tt', '')}/season-${season}/episode-${episode}`;
+    
+    console.log(`[OpenSubtitles] Searching: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'AnimeStream v1.0',
+        ...buildBrowserHeaders()
+      },
+      cf: { cacheTtl: 3600, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      console.error(`[OpenSubtitles] Error: ${response.status}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    
+    // Filter by requested languages and format results
+    for (const sub of data) {
+      const langCode = sub.ISO639?.toLowerCase() || sub.SubLanguageID?.toLowerCase();
+      
+      if (languages.length === 0 || languages.includes(langCode) || languages.includes(sub.SubLanguageID)) {
+        subtitles.push({
+          id: `opensubs-${sub.IDSubtitleFile}`,
+          url: sub.SubDownloadLink?.replace('.gz', ''),
+          lang: langCode,
+          episode: parseInt(sub.SeriesEpisode) || episode,
+          filename: sub.SubFileName,
+          format: sub.SubFormat || 'srt',
+          provider: 'OpenSubtitles',
+          rating: parseFloat(sub.SubRating) || 0
+        });
+      }
+    }
+    
+    // Sort by rating
+    subtitles.sort((a, b) => b.rating - a.rating);
+    
+    // Cache results
+    subtitleCache.set(cacheKey, { data: subtitles, timestamp: Date.now() });
+    
+    console.log(`[OpenSubtitles] Found ${subtitles.length} subtitles`);
+    return subtitles;
+    
+  } catch (error) {
+    console.error(`[OpenSubtitles] Error: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Get all subtitles for an anime episode from multiple sources
+ */
+async function getSubtitles(animeName, imdbId, season, episode, languages = ['en', 'ja']) {
+  // Fetch from both sources in parallel
+  const [kitsunekkoSubs, openSubs, subdlSubs] = await Promise.all([
+    scrapeKitsunekko(animeName),
+    imdbId ? searchOpenSubtitles(imdbId, season, episode, languages) : Promise.resolve([]),
+    searchSubDL(animeName, season, episode, languages)
+  ]);
+  
+  // Filter Kitsunekko subs by episode
+  const episodeSubs = kitsunekkoSubs.filter(s => !s.episode || s.episode === episode);
+  
+  // Combine and deduplicate
+  const combined = [...episodeSubs, ...openSubs, ...subdlSubs];
+  
+  // Sort: Japanese subs first (for RAW content), then by language preference
+  const langOrder = { 'jpn': 0, 'ja': 0, 'eng': 1, 'en': 1 };
+  combined.sort((a, b) => {
+    const aOrder = langOrder[a.lang] ?? 99;
+    const bOrder = langOrder[b.lang] ?? 99;
+    return aOrder - bOrder;
+  });
+  
+  return combined;
+}
+
+/**
+ * Search subtitles from SubDL API (good anime coverage)
+ * @param {string} animeName - Anime name to search
+ * @param {number} season - Season number
+ * @param {number} episode - Episode number
+ * @param {Array} languages - Array of language codes
+ * @returns {Promise<Array>} Array of subtitle objects
+ */
+async function searchSubDL(animeName, season, episode, languages = ['en']) {
+  const cacheKey = `subdl:${animeName}:${season}:${episode}`;
+  
+  // Check cache
+  const cached = subtitleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < SUBTITLE_CACHE_TTL) {
+    return cached.data;
+  }
+  
+  const subtitles = [];
+  
+  try {
+    // SubDL search API
+    const cleanName = animeName.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const query = `${cleanName} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+    const url = `https://api.subdl.com/api/v1/subtitles?subs_per_page=30&type=tv&query=${encodeURIComponent(query)}`;
+    
+    console.log(`[SubDL] Searching: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: buildBrowserHeaders(),
+      cf: { cacheTtl: 3600, cacheEverything: true }
+    });
+    
+    if (!response.ok) {
+      console.error(`[SubDL] Error: ${response.status}`);
+      return [];
+    }
+    
+    const data = await response.json();
+    
+    if (data.status && data.subtitles) {
+      for (const sub of data.subtitles) {
+        // SubDL uses 2-letter codes
+        const langCode = sub.language?.toLowerCase() || 'en';
+        const lang3 = langCode === 'ja' || langCode === 'japanese' ? 'jpn' : 
+                      langCode === 'en' || langCode === 'english' ? 'eng' : langCode;
+        
+        subtitles.push({
+          id: `subdl-${sub.id || Math.random().toString(36).substr(2, 9)}`,
+          url: sub.url || `https://dl.subdl.com${sub.subtitlePage}`,
+          lang: lang3,
+          episode,
+          filename: sub.releaseName || sub.name,
+          format: 'srt',
+          provider: 'SubDL'
+        });
+      }
+    }
+    
+    // Cache results
+    subtitleCache.set(cacheKey, { data: subtitles, timestamp: Date.now() });
+    
+    console.log(`[SubDL] Found ${subtitles.length} subtitles`);
+    return subtitles;
+    
+  } catch (error) {
+    console.error(`[SubDL] Error: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Format subtitles for Stremio response
+ */
+function formatSubtitlesForStremio(subtitles) {
+  return subtitles.map(sub => ({
+    id: sub.id,
+    url: sub.url,
+    lang: sub.lang === 'jpn' || sub.lang === 'ja' ? 'jpn' : 
+          sub.lang === 'eng' || sub.lang === 'en' ? 'eng' : sub.lang
+  }));
+}
+
 // Handle stream requests (using direct API)
-async function handleStream(catalog, type, id) {
+async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
   // Decode URL-encoded ID first (Stremio sometimes sends %3A instead of :)
   const decodedId = decodeURIComponent(id);
+  
+  // Dynamically determine base URL from request (for local dev vs production)
+  const workerBaseUrl = requestUrl 
+    ? `${requestUrl.protocol}//${requestUrl.host}` 
+    : 'https://animestream-addon.keypop3750.workers.dev';
   
   // Parse ID: tt1234567 or tt1234567:1:5 or mal-12345:1:5
   const parts = decodedId.split(':');
@@ -3959,26 +5997,129 @@ async function handleStream(catalog, type, id) {
   try {
     const streams = await getEpisodeSources(showId, absoluteEpisode);
     
-    if (!streams || streams.length === 0) {
-      return { streams: [] };
+    // Format streams for Stremio - use proxy for URLs requiring Referer header
+    // NOTE: workerBaseUrl is now defined at the top of handleStream
+    
+    const formattedStreams = [];
+    
+    // Add AllAnime streams (hardsubbed)
+    if (streams && streams.length > 0) {
+      for (const stream of streams) {
+        // Proxy URLs that require Referer header (fast4speed)
+        let streamUrl = stream.url;
+        if (stream.url.includes('fast4speed')) {
+          streamUrl = `${workerBaseUrl}/proxy/${encodeURIComponent(stream.url)}`;
+        }
+        
+        formattedStreams.push({
+          name: `AnimeStream`,
+          title: `[SUB] ${stream.type || 'SUB'} - ${stream.quality || 'HD'}`,
+          url: streamUrl
+        });
+      }
     }
     
-    // Format streams for Stremio - use proxy for URLs requiring Referer header
-    const workerBaseUrl = 'https://animestream-addon.keypop3750.workers.dev';
-    
-    const formattedStreams = streams.map(stream => {
-      // Proxy URLs that require Referer header (fast4speed)
-      let streamUrl = stream.url;
-      if (stream.url.includes('fast4speed')) {
-        streamUrl = `${workerBaseUrl}/proxy/${encodeURIComponent(stream.url)}`;
-      }
+    // Fetch torrent streams for RAW content (only if user has debrid configured)
+    // Torrents will be shown with debrid resolution URLs
+    try {
+      // Enrich anime object with AniDB ID, synonyms from id-mappings.json
+      // This is critical for accurate torrent searching via AnimeTosho
+      const enrichedAnime = await enrichAnimeWithMappings(anime, baseId);
+      const animeName = enrichedAnime.name || enrichedAnime.title?.userPreferred || enrichedAnime.title?.romaji || 'Unknown';
+      // Pass full anime object for ID-based torrent search (AniDB ID is most accurate)
+      // The getTorrentStreams function handles both object and string inputs
+      console.log(`[Stream] Enriched anime: anidb_id=${enrichedAnime.anidb_id}, mal_id=${enrichedAnime.mal_id}, synonyms=${enrichedAnime.synonyms?.length || 0}`);
+      const torrents = await getTorrentStreams(enrichedAnime, absoluteEpisode, season);
       
-      return {
-        name: `AnimeStream`,
-        title: `${stream.type || 'SUB'} - ${stream.quality || 'HD'}`,
-        url: streamUrl
-      };
-    });
+      if (torrents.length > 0) {
+        console.log(`[Stream] Found ${torrents.length} torrent streams for "${animeName}" E${absoluteEpisode}`);
+        
+        // Check if user has debrid configured
+        const hasDebrid = config.debridProvider && config.debridApiKey;
+        
+        // Batch check cache status for all torrents (if debrid configured)
+        let cacheStatus = new Map();
+        if (hasDebrid) {
+          const topTorrents = torrents.slice(0, 5);
+          const hashes = topTorrents.map(t => t.infoHash).filter(Boolean);
+          if (hashes.length > 0) {
+            try {
+              cacheStatus = await checkDebridCacheBatch(hashes, config.debridProvider, config.debridApiKey);
+              const cachedCount = Array.from(cacheStatus.values()).filter(v => v === true).length;
+              console.log(`[Stream] Cache check: ${cachedCount}/${hashes.length} torrents cached on ${config.debridProvider}`);
+            } catch (cacheErr) {
+              console.error(`[Stream] Cache check error: ${cacheErr.message}`);
+            }
+          }
+        }
+        
+        // Add top 5 torrent streams with cache status labels
+        for (const torrent of torrents.slice(0, 5)) {
+          // Build clean title like Torrentio: "AnimeName - Quality\n👤 Seeders 💾 Size"
+          const qualityLabel = torrent.quality !== 'Unknown' ? torrent.quality : '';
+          const rawTag = torrent.isRaw ? ' [RAW]' : '';
+          const codecTag = /hevc|x265|h\.?265/i.test(torrent.title) ? ' HEVC' : 
+                          /x264|h\.?264/i.test(torrent.title) ? ' x264' : '';
+          
+          // Format seeders and size for subtitle line (like Torrentio)
+          const seedersDisplay = torrent.seeders > 0 ? `👤 ${torrent.seeders}` : '';
+          const sizeDisplay = torrent.size ? `💾 ${torrent.size}` : '';
+          const groupDisplay = torrent.releaseGroup !== 'Unknown' ? `⚙️ ${torrent.releaseGroup}` : '';
+          
+          // Build metadata line (seeders, size, group)
+          const metaParts = [seedersDisplay, sizeDisplay, groupDisplay].filter(Boolean);
+          const metaLine = metaParts.length > 0 ? metaParts.join(' ') : '';
+          
+          if (hasDebrid) {
+            // User has debrid configured - provide direct play URL
+            const providerShort = DEBRID_PROVIDERS[config.debridProvider]?.shortName || 'DB';
+            
+            // Get cache status for this torrent (ensure lowercase comparison)
+            const hashLower = torrent.infoHash?.toLowerCase();
+            const isCached = cacheStatus.has(hashLower) ? cacheStatus.get(hashLower) : null;
+            // ⚡ = cached (instant), ⏳ = not cached (will download), ❓ = unknown/error
+            const cacheEmoji = isCached === true ? '⚡' : isCached === false ? '⏳' : '❓';
+            
+            // Build title: "AnimeName - 1080p HEVC [RAW]\n👤 32 💾 542.13 MB ⚙️ SubsPlease"
+            const titleLine = `${animeName} - ${qualityLabel}${codecTag}${rawTag}`.trim().replace(/- $/, '').trim();
+            const fullTitle = metaLine ? `${titleLine}\n${metaLine}` : titleLine;
+            
+            formattedStreams.push({
+              name: `${cacheEmoji} ${providerShort}`,
+              title: fullTitle,
+              url: `${workerBaseUrl}/debrid/play?ih=${torrent.infoHash}&p=${config.debridProvider}&key=${encodeURIComponent(config.debridApiKey)}&ep=${absoluteEpisode}&s=${season}`,
+              behaviorHints: {
+                bingeGroup: `torrent-${showId}-${season}`
+              }
+            });
+          } else {
+            // No debrid configured - show as magnet/configure prompt
+            const titleLine = `${animeName} - ${qualityLabel}${codecTag}${rawTag}`.trim().replace(/- $/, '').trim();
+            const fullTitle = metaLine ? `${titleLine}\n${metaLine}\n⚠️ Requires Debrid` : `${titleLine}\n⚠️ Requires Debrid`;
+            
+            formattedStreams.push({
+              name: `🧲 Torrent`,
+              title: fullTitle,
+              // Link to configure page to set up debrid
+              externalUrl: `${workerBaseUrl}/configure`,
+              behaviorHints: {
+                notWebReady: true,
+                bingeGroup: `torrent-${showId}-${season}`
+              },
+              infoHash: torrent.infoHash,
+              sources: [`tracker:udp://tracker.opentrackr.org:1337/announce`]
+            });
+          }
+        }
+      }
+    } catch (torrentErr) {
+      console.error(`[Stream] Torrent fetch error: ${torrentErr.message}`);
+      // Continue without torrents
+    }
+    
+    if (formattedStreams.length === 0) {
+      return { streams: [] };
+    }
     
     return { streams: formattedStreams };
   } catch (e) {
@@ -4060,6 +6201,114 @@ export default {
           status: 502,
           headers: JSON_HEADERS
         });
+      }
+    }
+    
+    // ===== DEBRID PLAY ENDPOINT (Click-time resolution) =====
+    // Resolves magnet to direct HTTPS stream when user clicks play
+    if (path === '/debrid/play') {
+      const infoHash = url.searchParams.get('ih');
+      const provider = url.searchParams.get('p');
+      const apiKey = url.searchParams.get('key');
+      const fileIndex = parseInt(url.searchParams.get('idx') || '0');
+      const episode = url.searchParams.get('ep') ? parseInt(url.searchParams.get('ep')) : null;
+      const season = url.searchParams.get('s') ? parseInt(url.searchParams.get('s')) : 1;
+      
+      if (!infoHash || !provider || !apiKey) {
+        return jsonResponse({ 
+          error: 'Missing parameters', 
+          required: ['ih (infoHash)', 'p (provider)', 'key (apiKey)'] 
+        }, { status: 400 });
+      }
+      
+      console.log(`[Debrid Play] Resolving ${infoHash} via ${provider}${episode ? ` for S${season}E${episode}` : ''}`);
+      
+      try {
+        // Build magnet from info hash WITH TRACKERS for better resolution
+        const magnet = buildMagnetWithTrackers(infoHash);
+        
+        // Resolve via debrid provider - pass episode info for smart file selection
+        const result = await resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex, episode, season);
+        
+        // Handle "downloading" status - torrent not cached
+        if (result && typeof result === 'object' && result.status === 'downloading') {
+          console.log(`[Debrid Play] Torrent not cached - returning info message`);
+          return jsonResponse({ 
+            error: 'Torrent not cached',
+            message: result.message || 'This torrent is not cached on the debrid service. Choose a ⚡ cached torrent for instant playback.',
+            hint: 'Look for streams marked with ⚡ (instant) instead of ⏳ (download)'
+          }, { status: 503 }); // 503 = Service Unavailable (temporary)
+        }
+        
+        if (!result || typeof result !== 'string') {
+          return jsonResponse({ 
+            error: 'Failed to resolve torrent',
+            message: 'Torrent may not be cached on debrid service. Try a ⚡ cached torrent.'
+          }, { status: 500 });
+        }
+        
+        console.log(`[Debrid Play] Resolved to: ${result.substring(0, 50)}...`);
+        
+        // Redirect to the direct stream URL
+        return Response.redirect(result, 302);
+        
+      } catch (error) {
+        console.error(`[Debrid Play] Error: ${error.message}`);
+        return jsonResponse({ 
+          error: 'Debrid resolution failed',
+          message: error.message 
+        }, { status: 500 });
+      }
+    }
+    
+    // ===== TORRENT SEARCH API =====
+    // Search for torrents by anime name (for testing)
+    if (path === '/api/torrents') {
+      const animeName = url.searchParams.get('q');
+      const episode = url.searchParams.get('ep') ? parseInt(url.searchParams.get('ep')) : null;
+      
+      if (!animeName) {
+        return jsonResponse({ error: 'Missing query parameter: q' }, { status: 400 });
+      }
+      
+      try {
+        const torrents = await getTorrentStreams(animeName, episode);
+        return jsonResponse({ 
+          query: animeName,
+          episode,
+          count: torrents.length,
+          torrents: torrents.slice(0, 20) // Limit to 20 results
+        });
+      } catch (error) {
+        return jsonResponse({ error: error.message }, { status: 500 });
+      }
+    }
+    
+    // ===== SUBTITLES API =====
+    // Get subtitles for an anime episode
+    if (path === '/api/subtitles') {
+      const animeName = url.searchParams.get('name');
+      const imdbId = url.searchParams.get('imdb');
+      const season = parseInt(url.searchParams.get('s') || '1');
+      const episode = parseInt(url.searchParams.get('ep') || '1');
+      const languages = (url.searchParams.get('lang') || 'en,ja').split(',');
+      
+      if (!animeName && !imdbId) {
+        return jsonResponse({ error: 'Missing parameter: name or imdb' }, { status: 400 });
+      }
+      
+      try {
+        const subtitles = await getSubtitles(animeName || 'Unknown', imdbId, season, episode, languages);
+        return jsonResponse({
+          animeName,
+          imdbId,
+          season,
+          episode,
+          count: subtitles.length,
+          subtitles: formatSubtitlesForStremio(subtitles)
+        });
+      } catch (error) {
+        return jsonResponse({ error: error.message }, { status: 500 });
       }
     }
     
@@ -4324,8 +6573,10 @@ export default {
     const streamMatch = path.match(/^(?:\/([^\/]+))?\/stream\/([^\/]+)\/(.+)\.json$/);
     if (streamMatch) {
       const [, configStr, type, id] = streamMatch;
+      const config = parseConfig(configStr);
       try {
-        const result = await handleStream(catalog, type, id);
+        // Pass URL object for dynamic base URL generation
+        const result = await handleStream(catalog, type, id, config, url);
         // Streams cached for 2 minutes - sources can change
         return jsonResponse(result, { maxAge: STREAM_HTTP_CACHE, staleWhileRevalidate: 60 });
       } catch (error) {
@@ -4400,8 +6651,48 @@ export default {
         })();
       }
       
-      // Always return empty subtitles - we're just using this handler for scrobbling
-      return jsonResponse({ subtitles: [] }, { maxAge: 60 });
+      // Fetch actual subtitles from Kitsunekko and SubDL
+      // NOTE: OpenSubtitles disabled - user has it as separate addon
+      try {
+        // Get anime name from catalog for Kitsunekko search
+        const anime = findAnimeById(catalog, imdbId);
+        const animeName = anime?.name || anime?.title?.userPreferred || '';
+        
+        // Fetch subtitles from Kitsunekko and SubDL in parallel
+        const [kitsunekkoSubs, subdlSubs] = await Promise.all([
+          animeName ? scrapeKitsunekko(animeName) : Promise.resolve([]),
+          searchSubDL(animeName || imdbId, season, episode, config.subtitleLanguages || ['en'])
+        ]);
+        
+        // Filter Kitsunekko subs by episode if available
+        const filteredKitsunekko = kitsunekkoSubs.filter(sub => 
+          !sub.episode || sub.episode === episode
+        );
+        
+        // Combine and format for Stremio (Kitsunekko + SubDL)
+        const allSubs = [...filteredKitsunekko, ...subdlSubs];
+        
+        // Deduplicate by URL
+        const seenUrls = new Set();
+        const uniqueSubs = allSubs.filter(sub => {
+          if (seenUrls.has(sub.url)) return false;
+          seenUrls.add(sub.url);
+          return true;
+        });
+        
+        const formattedSubs = uniqueSubs.map(sub => ({
+          id: sub.id,
+          url: sub.url,
+          lang: sub.lang === 'jpn' ? 'jpn' : sub.lang === 'eng' ? 'eng' : sub.lang,
+        }));
+        
+        console.log(`[Subtitles] Found ${formattedSubs.length} subtitles for ${imdbId} S${season}E${episode}`);
+        
+        return jsonResponse({ subtitles: formattedSubs }, { maxAge: 3600 }); // Cache for 1 hour
+      } catch (subError) {
+        console.error(`[Subtitles] Error fetching subtitles: ${subError.message}`);
+        return jsonResponse({ subtitles: [] }, { maxAge: 60 });
+      }
     }
     
     // ===== SCROBBLING API ROUTES =====
