@@ -3527,6 +3527,13 @@ async function handleAniListCatalog(listName, config, catalogData) {
                 id
                 idMal
                 title { romaji english native }
+                format
+                coverImage { large medium }
+                description(asHtml: false)
+                genres
+                seasonYear
+                startDate { year }
+                averageScore
               }
             }
           }
@@ -3567,11 +3574,12 @@ async function handleAniListCatalog(listName, config, catalogData) {
     
     // Match to catalog by AniList ID or MAL ID (catalog uses anilist_id and mal_id fields)
     const results = [];
-    const unmatched = [];
+    const unmatchedEntries = [];
     for (const entry of entries) {
       const anilistId = entry.media?.id;
       const malId = entry.media?.idMal;
-      const title = entry.media?.title?.english || entry.media?.title?.romaji || 'Unknown';
+      const media = entry.media || {};
+      const title = media.title?.english || media.title?.romaji || 'Unknown';
       
       // Try to find in catalog - catalog uses anilist_id and mal_id (with underscores)
       let match = catalogData.find(a => 
@@ -3584,15 +3592,30 @@ async function handleAniListCatalog(listName, config, catalogData) {
       if (match) {
         results.push(match);
       } else {
-        unmatched.push({ anilistId, malId, title });
+        // Create a fallback entry from AniList data for anime not in catalog
+        const fallbackEntry = {
+          id: malId ? 'mal-' + malId : 'al-' + anilistId,
+          anilist_id: anilistId,
+          mal_id: malId,
+          type: media.format === 'MOVIE' ? 'movie' : 'series',
+          name: title,
+          poster: media.coverImage?.large || media.coverImage?.medium || '',
+          description: media.description ? media.description.replace(/<[^>]*>/g, '').substring(0, 500) : '',
+          genres: media.genres || [],
+          year: media.seasonYear || media.startDate?.year || null,
+          rating: media.averageScore ? media.averageScore / 10 : null,
+          _fromAniListFallback: true
+        };
+        results.push(fallbackEntry);
+        unmatchedEntries.push({ anilistId, malId, title });
       }
     }
     
-    console.log('[AniList Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
-    if (unmatched.length > 0 && unmatched.length <= 10) {
-      console.log('[AniList Catalog] Unmatched:', unmatched.map(u => `${u.title} (AL:${u.anilistId})`).join(', '));
-    } else if (unmatched.length > 10) {
-      console.log('[AniList Catalog] ' + unmatched.length + ' unmatched anime (not in catalog)');
+    const catalogMatched = results.filter(r => !r._fromAniListFallback).length;
+    const fallbackCount = unmatchedEntries.length;
+    console.log('[AniList Catalog] Matched ' + catalogMatched + '/' + entries.length + ' to catalog, ' + fallbackCount + ' using AniList fallback');
+    if (unmatchedEntries.length > 0 && unmatchedEntries.length <= 10) {
+      console.log('[AniList Catalog] Fallback entries:', unmatchedEntries.map(u => `${u.title} (AL:${u.anilistId})`).join(', '));
     }
     return results;
     
@@ -3654,11 +3677,11 @@ async function handleMalCatalog(listName, config, catalogData) {
     
     // Match to catalog by MAL ID (catalog uses mal_id field)
     const results = [];
-    const unmatched = [];
+    const unmatchedEntries = [];
     for (const entry of entries) {
       const malId = entry.node?.id;
       const malIdStr = String(malId);
-      const title = entry.node?.title || 'Unknown';
+      const node = entry.node || {};
       
       // Try to find in catalog - catalog uses mal_id field (with underscore)
       let match = catalogData.find(a => 
@@ -3670,15 +3693,30 @@ async function handleMalCatalog(listName, config, catalogData) {
       if (match) {
         results.push(match);
       } else {
-        unmatched.push({ malId, title });
+        // Create a fallback entry from MAL data for anime not in catalog
+        // This handles newer seasons that don't have IMDB IDs yet
+        const fallbackEntry = {
+          id: 'mal-' + malId,
+          mal_id: malId,
+          type: 'series',
+          name: node.title || 'Unknown',
+          poster: node.main_picture?.large || node.main_picture?.medium || '',
+          description: '',
+          genres: [],
+          year: null,
+          rating: null,
+          _fromMalFallback: true
+        };
+        results.push(fallbackEntry);
+        unmatchedEntries.push({ malId, title: node.title || 'Unknown' });
       }
     }
     
-    console.log('[MAL Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
-    if (unmatched.length > 0 && unmatched.length <= 10) {
-      console.log('[MAL Catalog] Unmatched:', unmatched.map(u => `${u.title} (MAL:${u.malId})`).join(', '));
-    } else if (unmatched.length > 10) {
-      console.log('[MAL Catalog] ' + unmatched.length + ' unmatched anime (not in catalog)');
+    const catalogMatched = results.filter(r => !r._fromMalFallback).length;
+    const fallbackCount = unmatchedEntries.length;
+    console.log('[MAL Catalog] Matched ' + catalogMatched + '/' + entries.length + ' to catalog, ' + fallbackCount + ' using MAL fallback');
+    if (unmatchedEntries.length > 0 && unmatchedEntries.length <= 10) {
+      console.log('[MAL Catalog] Fallback entries:', unmatchedEntries.map(u => `${u.title} (MAL:${u.malId})`).join(', '));
     }
     return results;
     
