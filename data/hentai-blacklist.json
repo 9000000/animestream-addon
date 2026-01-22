@@ -1,0 +1,120 @@
+{
+  "generatedAt": "2026-01-22T13:02:53.624Z",
+  "totalEntries": 11,
+  "entries": [
+    {
+      "id": "tt3140358",
+      "imdb_id": "tt3140358",
+      "name": "Nozoki Ana",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt8819706",
+      "imdb_id": "tt8819706",
+      "name": "Kagaku na Yatsura",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt0331810",
+      "imdb_id": "tt0331810",
+      "name": "1+2=Paradise",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt0295622",
+      "imdb_id": "tt0295622",
+      "name": "My My Mai",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt3396174",
+      "imdb_id": "tt3396174",
+      "name": "Magical Kanan",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt6096690",
+      "imdb_id": "tt6096690",
+      "name": "Seikimatsu★Darling",
+      "reasons": [
+        "SIMILAR_MATCH"
+      ]
+    },
+    {
+      "id": "tt2263353",
+      "imdb_id": "tt2263353",
+      "name": "Kakyusei",
+      "reasons": [
+        "SIMILAR_MATCH"
+      ]
+    },
+    {
+      "id": "tt14642362",
+      "imdb_id": "tt14642362",
+      "name": "Akahori's Heretical Hour Love Game",
+      "reasons": [
+        "NSFW_KEYWORDS"
+      ]
+    },
+    {
+      "id": "tt3215348",
+      "imdb_id": "tt3215348",
+      "name": "Body Jack: Tanoshii Yutai Ridatsu",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    },
+    {
+      "id": "tt0251936",
+      "imdb_id": "tt0251936",
+      "name": "Pia Carrot e Youkoso!! 2 DX",
+      "reasons": [
+        "SIMILAR_MATCH"
+      ]
+    },
+    {
+      "id": "tt13087006",
+      "imdb_id": "tt13087006",
+      "name": "Bouken Shite mo Ii Koro",
+      "reasons": [
+        "EXACT_MATCH"
+      ]
+    }
+  ],
+  "imdbIds": [
+    "tt3140358",
+    "tt8819706",
+    "tt0331810",
+    "tt0295622",
+    "tt3396174",
+    "tt6096690",
+    "tt2263353",
+    "tt14642362",
+    "tt3215348",
+    "tt0251936",
+    "tt13087006"
+  ],
+  "names": [
+    "nozoki ana",
+    "kagaku na yatsura",
+    "12paradise",
+    "my my mai",
+    "magical kanan",
+    "seikimatsudarling",
+    "kakyusei",
+    "akahoris heretical hour love game",
+    "body jack tanoshii yutai ridatsu",
+    "pia carrot e youkoso 2 dx",
+    "bouken shite mo ii koro"
+  ]
+}

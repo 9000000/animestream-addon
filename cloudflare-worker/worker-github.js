@@ -775,6 +775,14 @@ const CONFIGURE_HTML = `<!doctype html>
   .scrobble-status .disconnect{background:#ef4444;border:none;color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;margin-left:auto}
   .scrobble-status .disconnect:hover{background:#dc2626}
   input::placeholder{color:var(--muted) !important;opacity:1}
+  .stream-mode-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media (max-width: 720px){ .stream-mode-btns{grid-template-columns:1fr} }
+  .mode-btn{background:var(--box);border:2px solid transparent;border-radius:16px;padding:14px 18px;cursor:pointer;color:var(--fg);font-weight:600;transition:all .2s ease}
+  .mode-btn:hover{border-color:rgba(57,38,166,.3)}
+  .mode-btn.active{background:var(--primary);border-color:var(--primary)}
+  .mode-btn.active:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+  @keyframes greenPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+  .control.highlight-new{animation:greenPulse 1.5s ease 3;border-color:rgba(34,197,94,.5)}
 </style>
 </head>
 <body>
@@ -806,84 +814,85 @@ const CONFIGURE_HTML = `<!doctype html>
         </div>
 
         <div>
-          <div class="section-title">Hide Catalogs</div>
-          <div class="lang-controls">
-            <select id="catalogPicker" class="control">
-              <option value="">Select catalogs to hide...</option>
-              <option value="top">Top Rated</option>
-              <option value="season">Season Releases</option>
-              <option value="airing">Currently Airing</option>
-              <option value="movies">Movies</option>
-            </select>
-            <button class="btn btn-sm btn-outline" id="catalogAdd" type="button">Add</button>
-            <button class="btn btn-sm btn-outline" id="catalogClear" type="button">Clear</button>
+          <div class="section-title">Connect Accounts</div>
+          <div class="scrobble-row">
+            <div style="flex:1">
+              <label>AniList</label>
+              <button id="anilistAuthBtn" class="btn btn-sm btn-outline" style="width:100%" type="button">Login with AniList</button>
+              <div id="anilistStatus"></div>
+            </div>
+            <div style="flex:1">
+              <label>MyAnimeList</label>
+              <button id="malAuthBtn" class="btn btn-sm btn-outline" style="width:100%" type="button">Login with MAL</button>
+              <div id="malStatus"></div>
+            </div>
           </div>
-          <div class="help">Hide catalogs from Stremio. At least one must remain visible.</div>
+          <div class="help">Connect your accounts to sync watch progress and access your anime lists as catalogs.</div>
+        </div>
+
+        <div>
+          <div class="section-title">Choose Catalogs</div>
+          <div class="lang-controls" style="grid-template-columns:1fr auto">
+            <select id="catalogPicker" class="control" size="1">
+              <option value="">Select catalogs to add...</option>
+              <optgroup label="Default Catalogs">
+                <option value="top">Top Rated</option>
+                <option value="season">Season Releases</option>
+                <option value="airing">Currently Airing</option>
+                <option value="movies">Movies</option>
+              </optgroup>
+              <optgroup id="anilistListsGroup" label="AniList Lists" style="display:none"></optgroup>
+              <optgroup id="malListsGroup" label="MAL Lists" style="display:none"></optgroup>
+            </select>
+            <button class="btn btn-sm btn-outline" id="catalogClear" type="button">Reset</button>
+          </div>
+          <div class="help">Choose which catalogs to show in Stremio. At least one must be selected.</div>
           <div id="catalogPills" class="pill-grid"></div>
         </div>
 
         <div>
-          <div class="section-title">Scrobbling (Sync Watch Progress)</div>
-          <div class="help" style="margin-bottom:12px">Automatically track watched episodes. When you start an episode, it marks it as watched on your tracking account.</div>
+          <div class="section-title">Stream Mode</div>
           
-          <div class="scrobble-row">
-            <div>
-              <label>AniList</label>
-              <button id="anilistAuthBtn" class="btn btn-sm btn-outline" type="button">Login with AniList</button>
-              <div id="anilistStatus"></div>
+          <div class="stream-mode-btns">
+            <button id="modeHttps" class="mode-btn" type="button">HTTPS Streams Only</button>
+            <button id="modeTorrents" class="mode-btn" type="button">Torrents Only</button>
+            <button id="modeBoth" class="mode-btn active" type="button">Both</button>
+          </div>
+          
+          <div id="debridSection" style="margin-top:16px">
+            <div class="scrobble-row">
+              <div>
+                <label>Debrid Provider</label>
+                <select id="debridProvider" class="control">
+                  <option value="none">None (raw torrents)</option>
+                  <option value="realdebrid">Real-Debrid</option>
+                  <option value="alldebrid">AllDebrid</option>
+                  <option value="premiumize">Premiumize</option>
+                  <option value="torbox">TorBox</option>
+                  <option value="debridlink">Debrid-Link</option>
+                  <option value="easydebrid">EasyDebrid</option>
+                  <option value="offcloud">Offcloud</option>
+                  <option value="putio">Put.io</option>
+                </select>
+              </div>
+              
+              <div>
+                <label>API Key</label>
+                <div class="input-btn-row">
+                  <input id="debridApiKey" type="password" class="control" placeholder="Enter your API key" />
+                  <button id="validateDebrid" class="btn btn-sm btn-outline" type="button">Validate</button>
+                </div>
+              </div>
             </div>
             
-            <div>
-              <label>MyAnimeList</label>
-              <button id="malAuthBtn" class="btn btn-sm btn-outline" type="button">Login with MAL</button>
-              <div id="malStatus"></div>
-            </div>
+            <div id="debridStatus" style="margin-top:8px"></div>
           </div>
         </div>
 
         <div>
-          <div class="section-title">RAW Anime + Debrid (NEW!)</div>
-          <div class="help" style="margin-bottom:12px">Enable torrent streams for RAW (unsubtitled) anime with higher quality. Requires a debrid service subscription for instant streaming.</div>
-          
-          <div class="toggles-row" style="margin-bottom:12px">
-            <div>
-              <div id="toggleEnableTorrents" class="toggle-box" role="button" tabindex="0" aria-pressed="true">
-                <input id="enableTorrents" type="checkbox" checked />
-                <div class="label">Enable torrent streams</div>
-              </div>
-              <div class="help">Show RAW torrent options alongside regular streams</div>
-            </div>
-            <div>
-              <div id="togglePreferRaw" class="toggle-box" role="button" tabindex="0" aria-pressed="false">
-                <input id="preferRaw" type="checkbox" />
-                <div class="label">Prefer RAW releases</div>
-              </div>
-              <div class="help">Sort RAW (no subtitles) releases first</div>
-            </div>
-          </div>
-          
-          <div class="scrobble-row">
-            <div>
-              <label>Debrid Provider</label>
-              <select id="debridProvider" class="control">
-                <option value="">None (torrents won't play)</option>
-                <option value="realdebrid">Real-Debrid</option>
-                <option value="alldebrid">AllDebrid</option>
-                <option value="premiumize">Premiumize</option>
-                <option value="torbox">TorBox</option>
-                <option value="debridlink">Debrid-Link</option>
-              </select>
-              <div class="help">Select your debrid service</div>
-            </div>
-            
-            <div>
-              <label>API Key</label>
-              <input id="debridApiKey" type="password" class="control" placeholder="Enter your API key" />
-              <div class="help">Get from your debrid account settings</div>
-            </div>
-          </div>
-          
-          <div id="debridStatus" style="margin-top:8px"></div>
+          <div class="section-title">SubDL Subtitles</div>
+          <div class="help" style="margin-bottom:12px">SubDL provides additional subtitle sources for anime. Get your free API key from <a href="https://subdl.com/panel/apikey" target="_blank" rel="noopener" style="color:#c9a0ff">subdl.com/panel/apikey</a> (2000 requests/day).</div>
+          <input id="subdlApiKey" type="password" class="control" placeholder="Your SubDL API key" style="width:100%" />
         </div>
 
         <div>
@@ -926,13 +935,19 @@ const CONFIGURE_HTML = `<!doctype html>
     const state = { 
       showCounts: true, 
       excludeLongRunning: false, 
-      hiddenCatalogs: [], 
+      selectedCatalogs: ['top', 'season', 'airing', 'movies'], // Default: all 4 standard catalogs
       userId: '',
       // Debrid settings
-      enableTorrents: true,
+      streamMode: 'both', // 'https', 'torrents', 'both'
       preferRaw: false,
       debridProvider: '',
-      debridApiKey: ''
+      debridApiKey: '',
+      debridValidated: false,
+      // Subtitle settings
+      subdlApiKey: '',
+      // User lists from connected accounts
+      anilistLists: [],
+      malLists: []
     };
     
     function persist() { localStorage.setItem('animestream_config', JSON.stringify(state)); }
@@ -947,12 +962,13 @@ const CONFIGURE_HTML = `<!doctype html>
         const [key, value] = part.split('=');
         if (key === 'showCounts') state.showCounts = value !== '0';
         if (key === 'excludeLongRunning') state.excludeLongRunning = value === '1';
-        if (key === 'hc' && value) state.hiddenCatalogs = value.split(',').filter(c => ['top','season','airing','movies'].includes(c));
+        if (key === 'sc' && value) state.selectedCatalogs = value.split(',');
         if (key === 'uid' && value) state.userId = value;
-        if (key === 'tor' && value === '0') state.enableTorrents = false;
+        if (key === 'sm' && value) state.streamMode = ['https','torrents','both'].includes(value) ? value : 'both';
         if (key === 'raw' && value === '1') state.preferRaw = true;
         if (key === 'dp' && value) state.debridProvider = value;
         if (key === 'dk' && value) state.debridApiKey = decodeURIComponent(value);
+        if (key === 'sk' && value) state.subdlApiKey = decodeURIComponent(value);
       });
       persist();
     }
@@ -974,22 +990,35 @@ const CONFIGURE_HTML = `<!doctype html>
     const anilistStatusEl = $('#anilistStatus');
     
     // Debrid elements
-    const enableTorrentsEl = $('#enableTorrents');
     const preferRawEl = $('#preferRaw');
     const debridProviderEl = $('#debridProvider');
     const debridApiKeyEl = $('#debridApiKey');
     const debridStatusEl = $('#debridStatus');
+    const debridSectionEl = $('#debridSection');
+    const validateDebridBtn = $('#validateDebrid');
+    
+    // SubDL element
+    const subdlApiKeyEl = $('#subdlApiKey');
+    
+    // Stream mode buttons
+    const modeHttpsBtn = $('#modeHttps');
+    const modeTorrentsBtn = $('#modeTorrents');
+    const modeBothBtn = $('#modeBoth');
     
     const CATALOG_NAMES = { top: 'Top Rated', season: 'Season Releases', airing: 'Currently Airing', movies: 'Movies' };
+    const anilistListsGroup = $('#anilistListsGroup');
+    const malListsGroup = $('#malListsGroup');
     
     showCountsEl.checked = state.showCounts !== false;
     excludeLongRunningEl.checked = state.excludeLongRunning === true;
     
     // Initialize debrid settings
-    if (enableTorrentsEl) enableTorrentsEl.checked = state.enableTorrents !== false;
     if (preferRawEl) preferRawEl.checked = state.preferRaw === true;
-    if (debridProviderEl) debridProviderEl.value = state.debridProvider || '';
+    if (debridProviderEl) debridProviderEl.value = state.debridProvider || 'none';
     if (debridApiKeyEl) debridApiKeyEl.value = state.debridApiKey || '';
+    
+    // Initialize SubDL settings
+    if (subdlApiKeyEl) subdlApiKeyEl.value = state.subdlApiKey || '';
     
     function showToast(msg, isError) {
       toast.textContent = msg;
@@ -1007,15 +1036,23 @@ const CONFIGURE_HTML = `<!doctype html>
       } catch { statsEl.innerHTML = '<span class="stat">7,000+ anime</span>'; }
     }
     
-    // ===== CATALOG BLACKLIST =====
+    // ===== CATALOG SELECTION (Choose Catalogs) =====
+    function getCatalogName(key) {
+      if (CATALOG_NAMES[key]) return CATALOG_NAMES[key];
+      // User list catalogs: al_listname or mal_listname
+      if (key.startsWith('al_')) return 'AniList: ' + key.slice(3).replace(/_/g, ' ');
+      if (key.startsWith('mal_')) return 'MAL: ' + key.slice(4).replace(/_/g, ' ');
+      return key;
+    }
+    
     function renderCatalogPills() {
-      catalogPillsEl.innerHTML = state.hiddenCatalogs.map(key => 
-        '<div class="pill" data-key="' + key + '"><span class="txt">' + (CATALOG_NAMES[key] || key) + '</span><span class="handle" title="Remove">✕</span></div>'
+      catalogPillsEl.innerHTML = state.selectedCatalogs.map(key => 
+        '<div class="pill" data-key="' + key + '"><span class="txt">' + getCatalogName(key) + '</span><span class="handle" title="Remove">✕</span></div>'
       ).join('');
       
       // Update dropdown - hide already selected items
       Array.from(catalogPicker.options).forEach(opt => {
-        if (opt.value) opt.disabled = state.hiddenCatalogs.includes(opt.value);
+        if (opt.value) opt.disabled = state.selectedCatalogs.includes(opt.value);
       });
       catalogPicker.value = '';
       
@@ -1023,7 +1060,12 @@ const CONFIGURE_HTML = `<!doctype html>
       catalogPillsEl.querySelectorAll('.handle').forEach(handle => {
         handle.onclick = () => {
           const key = handle.parentElement.dataset.key;
-          state.hiddenCatalogs = state.hiddenCatalogs.filter(c => c !== key);
+          // Ensure at least 1 catalog remains
+          if (state.selectedCatalogs.length <= 1) {
+            showToast('At least one catalog must be selected', true);
+            return;
+          }
+          state.selectedCatalogs = state.selectedCatalogs.filter(c => c !== key);
           persist();
           renderCatalogPills();
           rerender();
@@ -1031,32 +1073,73 @@ const CONFIGURE_HTML = `<!doctype html>
       });
     }
     
-    catalogAddBtn.onclick = () => {
+    // Auto-add catalog on select (no Add button needed)
+    catalogPicker.onchange = () => {
       const val = catalogPicker.value;
       if (!val) return;
       
-      // Ensure at least 1 catalog remains visible
-      if (state.hiddenCatalogs.length >= 3) {
-        showToast('At least one catalog must remain visible', true);
-        return;
-      }
-      
-      if (!state.hiddenCatalogs.includes(val)) {
-        state.hiddenCatalogs.push(val);
+      if (!state.selectedCatalogs.includes(val)) {
+        state.selectedCatalogs.push(val);
         persist();
         renderCatalogPills();
         rerender();
+        // Keep dropdown open by refocusing (user can continue selecting)
+        setTimeout(() => catalogPicker.focus(), 10);
       }
+      catalogPicker.value = ''; // Reset to placeholder
     };
     
     catalogClearBtn.onclick = () => {
-      state.hiddenCatalogs = [];
+      // Reset to default 4 catalogs
+      state.selectedCatalogs = ['top', 'season', 'airing', 'movies'];
       persist();
       renderCatalogPills();
       rerender();
     };
     
+    // Populate user lists in dropdown
+    function updateCatalogDropdownWithUserLists() {
+      // Clear existing user list options
+      anilistListsGroup.innerHTML = '';
+      malListsGroup.innerHTML = '';
+      
+      // Add AniList lists
+      if (state.anilistLists && state.anilistLists.length > 0) {
+        anilistListsGroup.style.display = '';
+        state.anilistLists.forEach(list => {
+          const opt = document.createElement('option');
+          opt.value = 'al_' + list.name.replace(/\s+/g, '_');
+          opt.textContent = list.name + (list.count ? ' (' + list.count + ')' : '');
+          opt.disabled = state.selectedCatalogs.includes(opt.value);
+          anilistListsGroup.appendChild(opt);
+        });
+      } else {
+        anilistListsGroup.style.display = 'none';
+      }
+      
+      // Add MAL lists
+      if (state.malLists && state.malLists.length > 0) {
+        malListsGroup.style.display = '';
+        state.malLists.forEach(list => {
+          const opt = document.createElement('option');
+          opt.value = 'mal_' + list.name.replace(/\\s+/g, '_');
+          opt.textContent = list.name + (list.count ? ' (' + list.count + ')' : '');
+          opt.disabled = state.selectedCatalogs.includes(opt.value);
+          malListsGroup.appendChild(opt);
+        });
+      } else {
+        malListsGroup.style.display = 'none';
+      }
+    }
+    
+    // Highlight dropdown when new lists available
+    function highlightCatalogPicker() {
+      catalogPicker.classList.add('highlight-new');
+      setTimeout(() => catalogPicker.classList.remove('highlight-new'), 4500);
+    }
+    
     renderCatalogPills();
+    updateCatalogDropdownWithUserLists();
     
     showCountsEl.onchange = () => { state.showCounts = showCountsEl.checked; persist(); rerender(); };
     excludeLongRunningEl.onchange = () => { state.excludeLongRunning = excludeLongRunningEl.checked; persist(); rerender(); };
@@ -1086,7 +1169,6 @@ const CONFIGURE_HTML = `<!doctype html>
           '<button class="disconnect" id="anilistDisconnect">Disconnect</button></div>';
         
         $('#anilistDisconnect').onclick = async () => {
-          // Clear server-side tokens if we have a user ID
           if (state.userId) {
             try { await fetch('/api/user/' + state.userId + '/disconnect', { method: 'POST', body: JSON.stringify({ service: 'anilist' }) }); } catch {}
           }
@@ -1094,7 +1176,13 @@ const CONFIGURE_HTML = `<!doctype html>
           anilistToken = '';
           anilistUser = null;
           anilistUserId = null;
+          state.anilistLists = [];
+          // Remove anilist catalogs from selection
+          state.selectedCatalogs = state.selectedCatalogs.filter(c => !c.startsWith('al_'));
+          persist();
           renderAnilistStatus();
+          updateCatalogDropdownWithUserLists();
+          renderCatalogPills();
           rerender();
           showToast('AniList disconnected');
         };
@@ -1129,6 +1217,9 @@ const CONFIGURE_HTML = `<!doctype html>
           
           // Save tokens to server for scrobbling
           await saveTokensToServer();
+          
+          // Fetch user's anime lists
+          await fetchAnilistLists();
         } else {
           localStorage.removeItem('animestream_anilist_token');
           anilistToken = '';
@@ -1136,6 +1227,27 @@ const CONFIGURE_HTML = `<!doctype html>
       } catch {}
       renderAnilistStatus();
       rerender();
+    }
+    
+    // Fetch AniList user's custom lists
+    async function fetchAnilistLists() {
+      if (!anilistToken || !anilistUser) return;
+      try {
+        const res = await fetch('/api/anilist/lists', {
+          headers: { 'Authorization': 'Bearer ' + anilistToken }
+        });
+        const data = await res.json();
+        if (data.lists && data.lists.length > 0) {
+          const hadLists = state.anilistLists && state.anilistLists.length > 0;
+          state.anilistLists = data.lists;
+          persist();
+          updateCatalogDropdownWithUserLists();
+          // Highlight if new lists appeared
+          if (!hadLists) highlightCatalogPicker();
+        }
+      } catch (err) {
+        console.error('Failed to fetch AniList lists:', err);
+      }
     }
     
     // Save tokens to server (KV storage)
@@ -1201,7 +1313,6 @@ const CONFIGURE_HTML = `<!doctype html>
           '<button class="disconnect" id="malDisconnect">Disconnect</button></div>';
         
         $('#malDisconnect').onclick = async () => {
-          // Clear server-side tokens if we have a user ID
           if (state.userId) {
             try { await fetch('/api/user/' + state.userId + '/disconnect', { method: 'POST', body: JSON.stringify({ service: 'mal' }) }); } catch {}
           }
@@ -1210,7 +1321,13 @@ const CONFIGURE_HTML = `<!doctype html>
           malToken = '';
           malUser = null;
           malUserId = null;
+          state.malLists = [];
+          // Remove MAL catalogs from selection
+          state.selectedCatalogs = state.selectedCatalogs.filter(c => !c.startsWith('mal_'));
+          persist();
           renderMalStatus();
+          updateCatalogDropdownWithUserLists();
+          renderCatalogPills();
           rerender();
           showToast('MyAnimeList disconnected');
         };
@@ -1316,6 +1433,9 @@ const CONFIGURE_HTML = `<!doctype html>
           
           // Save tokens to server for scrobbling
           await saveTokensToServer();
+          
+          // Fetch user's anime lists
+          await fetchMalLists();
         } else {
           localStorage.removeItem('animestream_mal_token');
           malToken = '';
@@ -1325,6 +1445,27 @@ const CONFIGURE_HTML = `<!doctype html>
       rerender();
     }
     
+    // Fetch MAL user's anime lists
+    async function fetchMalLists() {
+      if (!malToken || !malUser) return;
+      try {
+        const res = await fetch('/api/mal/lists', {
+          headers: { 'Authorization': 'Bearer ' + malToken }
+        });
+        const data = await res.json();
+        if (data.lists && data.lists.length > 0) {
+          const hadLists = state.malLists && state.malLists.length > 0;
+          state.malLists = data.lists;
+          persist();
+          updateCatalogDropdownWithUserLists();
+          // Highlight if new lists appeared
+          if (!hadLists) highlightCatalogPicker();
+        }
+      } catch (err) {
+        console.error('Failed to fetch MAL lists:', err);
+      }
+    }
+    
     // Initialize - check for OAuth tokens in URL first
     checkUrlForMalCode();
     checkUrlForAnilistToken();
@@ -1332,37 +1473,126 @@ const CONFIGURE_HTML = `<!doctype html>
     checkMalConnection();
     
     // ===== DEBRID SETTINGS HANDLERS =====
-    function updateDebridStatus() {
-      if (!debridStatusEl) return;
+    function updateDebridUI() {
+      // Show/hide debrid section based on stream mode
+      const needsDebrid = state.streamMode === 'torrents' || state.streamMode === 'both';
+      if (debridSectionEl) {
+        debridSectionEl.style.display = needsDebrid ? 'block' : 'none';
+      }
       
-      if (state.debridProvider && state.debridApiKey) {
-        const providerNames = {
-          realdebrid: 'Real-Debrid',
-          alldebrid: 'AllDebrid',
-          premiumize: 'Premiumize',
-          torbox: 'TorBox',
-          debridlink: 'Debrid-Link'
-        };
-        debridStatusEl.innerHTML = '<div class="scrobble-status">' +
-          '<span class="icon">✓</span>' +
-          '<span>Configured: <span class="user">' + (providerNames[state.debridProvider] || state.debridProvider) + '</span></span>' +
-          '</div>';
-      } else if (state.enableTorrents) {
-        debridStatusEl.innerHTML = '<div class="help" style="color:#f59e0b">⚠️ Torrent streams enabled but no debrid configured. Torrents will show but won\\'t play.</div>';
-      } else {
-        debridStatusEl.innerHTML = '';
+      // Update mode button states
+      [modeHttpsBtn, modeTorrentsBtn, modeBothBtn].forEach(btn => btn?.classList.remove('active'));
+      if (state.streamMode === 'https' && modeHttpsBtn) modeHttpsBtn.classList.add('active');
+      else if (state.streamMode === 'torrents' && modeTorrentsBtn) modeTorrentsBtn.classList.add('active');
+      else if (modeBothBtn) modeBothBtn.classList.add('active');
+      
+      // Check if a real debrid provider is selected (not 'none')
+      const hasDebridProvider = state.debridProvider && state.debridProvider !== 'none';
+      
+      // Show/hide API key section based on provider selection
+      // debridApiKeyEl.parentElement is .input-btn-row, its parent is the <div> wrapper with <label>
+      const apiKeyWrapper = debridApiKeyEl?.parentElement?.parentElement;
+      if (apiKeyWrapper) {
+        apiKeyWrapper.style.display = hasDebridProvider ? '' : 'none';
+      }
+      
+      // Update debrid status and input styling
+      if (debridStatusEl) {
+        if (needsDebrid && hasDebridProvider && !state.debridValidated && state.debridApiKey) {
+          debridStatusEl.innerHTML = '<div class="help" style="color:#f59e0b">Please validate your debrid credentials</div>';
+        } else {
+          debridStatusEl.innerHTML = '';
+        }
+      }
+      
+      // Update API key input styling based on validation
+      if (debridApiKeyEl) {
+        if (state.debridValidated && hasDebridProvider && state.debridApiKey) {
+          debridApiKeyEl.classList.add('valid');
+          debridApiKeyEl.classList.remove('invalid');
+        } else if (state.debridApiKey && !state.debridValidated) {
+          debridApiKeyEl.classList.remove('valid');
+        } else {
+          debridApiKeyEl.classList.remove('valid');
+          debridApiKeyEl.classList.remove('invalid');
+        }
+      }
+      
+      // Update install buttons - only require validation if a real debrid provider is selected
+      // If 'none' is selected, install buttons are always enabled (raw torrents)
+      const canInstall = state.streamMode === 'https' || !hasDebridProvider || (state.debridValidated && state.debridApiKey);
+      if (appBtn) {
+        if (canInstall) {
+          appBtn.classList.remove('btn-disabled');
+        } else {
+          appBtn.classList.add('btn-disabled');
+        }
+      }
+      if (webBtn) {
+        if (canInstall) {
+          webBtn.classList.remove('btn-disabled');
+        } else {
+          webBtn.classList.add('btn-disabled');
+        }
       }
     }
     
-    if (enableTorrentsEl) {
-      enableTorrentsEl.onchange = () => {
-        state.enableTorrents = enableTorrentsEl.checked;
-        persist();
-        updateDebridStatus();
-        rerender();
-      };
-      wireToggle('toggleEnableTorrents', enableTorrentsEl);
+    // Stream mode button handlers
+    function setStreamMode(mode) {
+      state.streamMode = mode;
+      state.debridValidated = false; // Reset validation when mode changes
+      persist();
+      updateDebridUI();
+      rerender();
     }
+    
+    if (modeHttpsBtn) modeHttpsBtn.onclick = () => setStreamMode('https');
+    if (modeTorrentsBtn) modeTorrentsBtn.onclick = () => setStreamMode('torrents');
+    if (modeBothBtn) modeBothBtn.onclick = () => setStreamMode('both');
+    
+    // Validate debrid API key
+    async function validateDebridKey() {
+      const provider = state.debridProvider;
+      const apiKey = state.debridApiKey;
+      
+      if (!provider || !apiKey) {
+        showToast('Please select a provider and enter API key', true);
+        return;
+      }
+      
+      validateDebridBtn.textContent = 'Validating...';
+      validateDebridBtn.disabled = true;
+      
+      try {
+        const res = await fetch('/api/debrid/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey })
+        });
+        const data = await res.json();
+        
+        if (data.valid) {
+          state.debridValidated = true;
+          persist();
+          showToast('Debrid credentials validated!');
+        } else {
+          state.debridValidated = false;
+          persist();
+          showToast('Invalid credentials: ' + (data.error || 'Unknown error'), true);
+        }
+      } catch (err) {
+        state.debridValidated = false;
+        persist();
+        showToast('Validation failed: ' + err.message, true);
+      }
+      
+      validateDebridBtn.textContent = 'Validate';
+      validateDebridBtn.disabled = false;
+      updateDebridUI();
+      rerender();
+    }
+    
+    if (validateDebridBtn) validateDebridBtn.onclick = validateDebridKey;
     
     if (preferRawEl) {
       preferRawEl.onchange = () => {
@@ -1376,8 +1606,9 @@ const CONFIGURE_HTML = `<!doctype html>
     if (debridProviderEl) {
       debridProviderEl.onchange = () => {
         state.debridProvider = debridProviderEl.value;
+        state.debridValidated = false; // Reset validation when provider changes
         persist();
-        updateDebridStatus();
+        updateDebridUI();
         rerender();
       };
     }
@@ -1385,29 +1616,48 @@ const CONFIGURE_HTML = `<!doctype html>
     if (debridApiKeyEl) {
       debridApiKeyEl.onchange = () => {
         state.debridApiKey = debridApiKeyEl.value.trim();
+        state.debridValidated = false; // Reset validation when key changes
         persist();
-        updateDebridStatus();
+        updateDebridUI();
         rerender();
       };
       // Also update on blur for better UX
       debridApiKeyEl.onblur = debridApiKeyEl.onchange;
     }
     
-    // Initial debrid status
-    updateDebridStatus();
+    // Initial debrid UI setup
+    updateDebridUI();
+    
+    // SubDL API key handler
+    if (subdlApiKeyEl) {
+      subdlApiKeyEl.onchange = () => {
+        state.subdlApiKey = subdlApiKeyEl.value.trim();
+        persist();
+        rerender();
+      };
+      subdlApiKeyEl.onblur = subdlApiKeyEl.onchange;
+    }
     
     function buildConfigPath() {
       const parts = [];
       if (!state.showCounts) parts.push('showCounts=0');
       if (state.excludeLongRunning) parts.push('excludeLongRunning=1');
-      if (state.hiddenCatalogs.length > 0) parts.push('hc=' + state.hiddenCatalogs.join(','));
+      // Only include if different from default (all 4 standard catalogs)
+      const defaultCatalogs = ['top', 'season', 'airing', 'movies'];
+      const isDefault = state.selectedCatalogs.length === 4 && defaultCatalogs.every(c => state.selectedCatalogs.includes(c));
+      if (!isDefault) parts.push('sc=' + state.selectedCatalogs.join(','));
       // Include user ID for scrobbling (tokens stored server-side in KV)
       if (state.userId) parts.push('uid=' + state.userId);
       // Debrid settings
-      if (!state.enableTorrents) parts.push('tor=0');
+      if (state.streamMode !== 'both') parts.push('sm=' + state.streamMode);
       if (state.preferRaw) parts.push('raw=1');
-      if (state.debridProvider) parts.push('dp=' + state.debridProvider);
-      if (state.debridApiKey) parts.push('dk=' + encodeURIComponent(state.debridApiKey));
+      // Only include debrid settings if a real provider is selected (not 'none')
+      if (state.debridProvider && state.debridProvider !== 'none') {
+        parts.push('dp=' + state.debridProvider);
+        if (state.debridApiKey) parts.push('dk=' + encodeURIComponent(state.debridApiKey));
+      }
+      // SubDL API key
+      if (state.subdlApiKey) parts.push('sk=' + encodeURIComponent(state.subdlApiKey));
       return parts.join('&');
     }
     
@@ -2306,6 +2556,19 @@ function parseSeasonFilter(seasonValue) {
 // Block hentai and adult content from appearing in catalogs
 // These IDs were detected using HentaiStream database matching
 const NSFW_BLOCKLIST = new Set([
+  // Detected via hentai detection script (hentai/borderline content)
+  'tt3140358',  // Nozoki Ana
+  'tt8819706',  // Kagaku na Yatsura
+  'tt0331810',  // 1+2=Paradise
+  'tt0295622',  // My My Mai
+  'tt3396174',  // Magical Kanan
+  'tt6096690',  // Seikimatsu Darling
+  'tt2263353',  // Kakyusei
+  'tt14642362', // Akahori's Heretical Hour
+  'tt3215348',  // Body Jack
+  'tt0251936',  // Pia Carrot
+  'tt13087006', // Bouken Shite mo Ii Koro
+  // MAL IDs from airing hentai
   'tt5235870','mal-48755','mal-49944','mal-59407','mal-61232','mal-62328','mal-60494','mal-61790',
   'mal-53204','mal-62315','mal-59185','mal-60553','mal-57044','mal-61599','mal-60784','mal-62689',
   'mal-62406','mal-55003','mal-62316','mal-62380','mal-61764','mal-32587','mal-58891','mal-59840',
@@ -3201,6 +3464,211 @@ function handleMovies(catalogData, genreFilter) {
   return filtered;
 }
 
+/**
+ * Handle AniList user list catalog
+ * Fetches user's anime list from AniList and matches to local catalog
+ * @param {string} listName - The name of the AniList list (e.g., "Watching", "Completed")
+ * @param {Object} config - User configuration with anilistToken
+ * @param {Array} catalogData - Full catalog data for matching
+ * @returns {Array} Matched anime from user's list
+ */
+async function handleAniListCatalog(listName, config, catalogData) {
+  if (!config.anilistToken) {
+    console.log('[AniList Catalog] No token configured');
+    return [];
+  }
+  
+  try {
+    // Get the user's ID first
+    const userQuery = `query { Viewer { id name } }`;
+    const userResp = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + config.anilistToken
+      },
+      body: JSON.stringify({ query: userQuery })
+    });
+    
+    if (!userResp.ok) {
+      console.log('[AniList Catalog] Failed to get user:', userResp.status);
+      return [];
+    }
+    
+    const userData = await userResp.json();
+    const userId = userData?.data?.Viewer?.id;
+    if (!userId) {
+      console.log('[AniList Catalog] No user ID found');
+      return [];
+    }
+    
+    // Map standard list names to AniList status
+    const statusMap = {
+      'Watching': 'CURRENT',
+      'Completed': 'COMPLETED',
+      'Paused': 'PAUSED',
+      'Dropped': 'DROPPED',
+      'Planning': 'PLANNING'
+    };
+    
+    // Check if it's a standard list or custom list
+    const status = statusMap[listName];
+    
+    // Fetch the user's anime list
+    const listQuery = `
+      query ($userId: Int, $status: MediaListStatus) {
+        MediaListCollection(userId: $userId, type: ANIME, status: $status) {
+          lists {
+            name
+            entries {
+              mediaId
+              media {
+                id
+                idMal
+                title { romaji english native }
+              }
+            }
+          }
+        }
+      }
+    `;
+    
+    const variables = { userId };
+    if (status) variables.status = status;
+    
+    const listResp = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + config.anilistToken
+      },
+      body: JSON.stringify({ query: listQuery, variables })
+    });
+    
+    if (!listResp.ok) {
+      console.log('[AniList Catalog] Failed to get list:', listResp.status);
+      return [];
+    }
+    
+    const listData = await listResp.json();
+    const lists = listData?.data?.MediaListCollection?.lists || [];
+    
+    // Collect all entries from matching lists
+    const entries = [];
+    for (const list of lists) {
+      // For custom lists, match by name; for standard lists, include all
+      if (!status || list.name === listName) {
+        entries.push(...(list.entries || []));
+      }
+    }
+    
+    console.log('[AniList Catalog] Found ' + entries.length + ' entries in list "' + listName + '"');
+    
+    // Match to catalog by AniList ID or MAL ID (catalog uses anilist_id and mal_id fields)
+    const results = [];
+    for (const entry of entries) {
+      const anilistId = entry.media?.id;
+      const malId = entry.media?.idMal;
+      
+      // Try to find in catalog - catalog uses anilist_id and mal_id (with underscores)
+      let match = catalogData.find(a => 
+        a.anilist_id == anilistId || 
+        String(a.anilist_id) === String(anilistId) ||
+        a.id === 'al-' + anilistId ||
+        (malId && (a.mal_id == malId || a.id === 'mal-' + malId))
+      );
+      
+      if (match) {
+        results.push(match);
+      }
+    }
+    
+    console.log('[AniList Catalog] Matched ' + results.length + ' anime to catalog');
+    return results;
+    
+  } catch (err) {
+    console.error('[AniList Catalog] Error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Handle MAL user list catalog
+ * Fetches user's anime list from MyAnimeList and matches to local catalog
+ * @param {string} listName - The name of the MAL list (e.g., "Watching", "Completed")
+ * @param {Object} config - User configuration with malToken
+ * @param {Array} catalogData - Full catalog data for matching
+ * @returns {Array} Matched anime from user's list
+ */
+async function handleMalCatalog(listName, config, catalogData) {
+  if (!config.malToken) {
+    console.log('[MAL Catalog] No token configured');
+    return [];
+  }
+  
+  try {
+    // Map list names to MAL status
+    const statusMap = {
+      'Watching': 'watching',
+      'Completed': 'completed',
+      'On Hold': 'on_hold',
+      'Dropped': 'dropped',
+      'Plan to Watch': 'plan_to_watch'
+    };
+    
+    // Also handle URL-encoded versions
+    const decodedListName = decodeURIComponent(listName.replace(/_/g, ' '));
+    const status = statusMap[listName] || statusMap[decodedListName];
+    
+    if (!status) {
+      console.log('[MAL Catalog] Unknown list name: ' + listName);
+      return [];
+    }
+    
+    // Fetch user's anime list from MAL
+    const resp = await fetch('https://api.myanimelist.net/v2/users/@me/animelist?status=' + status + '&limit=1000&fields=id,title,main_picture', {
+      headers: {
+        'Authorization': 'Bearer ' + config.malToken
+      }
+    });
+    
+    if (!resp.ok) {
+      console.log('[MAL Catalog] Failed to get list:', resp.status);
+      return [];
+    }
+    
+    const data = await resp.json();
+    const entries = data?.data || [];
+    
+    console.log('[MAL Catalog] Found ' + entries.length + ' entries in list "' + listName + '"');
+    
+    // Match to catalog by MAL ID (catalog uses mal_id field)
+    const results = [];
+    for (const entry of entries) {
+      const malId = entry.node?.id;
+      const malIdStr = String(malId);
+      
+      // Try to find in catalog - catalog uses mal_id field (with underscore)
+      let match = catalogData.find(a => 
+        a.mal_id == malId ||  // Loose equality to handle number/string mismatch
+        String(a.mal_id) === malIdStr ||
+        a.id === 'mal-' + malIdStr
+      );
+      
+      if (match) {
+        results.push(match);
+      }
+    }
+    
+    console.log('[MAL Catalog] Matched ' + results.length + ' anime to catalog');
+    return results;
+    
+  } catch (err) {
+    console.error('[MAL Catalog] Error:', err.message);
+    return [];
+  }
+}
+
 // Generate season options dynamically based on current date
 // Shows current season first, then past seasons, with "Upcoming" for all future
 function generateSeasonOptions(filterOptions, currentSeason, showCounts, catalogData) {
@@ -3277,7 +3745,7 @@ function generateSeasonOptions(filterOptions, currentSeason, showCounts, catalog
 
 // ===== MANIFEST =====
 
-function getManifest(filterOptions, showCounts = true, catalogData = null, hiddenCatalogs = [], config = {}) {
+function getManifest(filterOptions, showCounts = true, catalogData = null, selectedCatalogs = ['top', 'season', 'airing', 'movies'], config = {}) {
   const genreOptions = showCounts && filterOptions.genres?.withCounts 
     ? filterOptions.genres.withCounts.filter(g => !g.toLowerCase().startsWith('animation'))
     : (filterOptions.genres?.list || []).filter(g => g.toLowerCase() !== 'animation');
@@ -3369,10 +3837,33 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
     }
   ];
   
-  // Filter out hidden catalogs (but always keep at least 1)
-  let visibleCatalogs = allCatalogs.filter(c => !hiddenCatalogs.includes(c.key));
+  // Filter to only include selected catalogs
+  let visibleCatalogs = allCatalogs.filter(c => selectedCatalogs.includes(c.key));
   if (visibleCatalogs.length === 0) {
     visibleCatalogs = [allCatalogs[0]]; // Fallback to Top Rated
+  }
+  
+  // Add user list catalogs (al_* for AniList, mal_* for MAL)
+  for (const catalogKey of selectedCatalogs) {
+    if (catalogKey.startsWith('al_')) {
+      const listName = catalogKey.slice(3).replace(/_/g, ' ');
+      visibleCatalogs.push({
+        id: 'anime-anilist-' + catalogKey.slice(3),
+        type: 'anime',
+        name: 'AniList: ' + listName,
+        key: catalogKey,
+        extra: [{ name: 'skip', isRequired: false }]
+      });
+    } else if (catalogKey.startsWith('mal_')) {
+      const listName = catalogKey.slice(4).replace(/_/g, ' ');
+      visibleCatalogs.push({
+        id: 'anime-mal-' + catalogKey.slice(4),
+        type: 'anime',
+        name: 'MAL: ' + listName,
+        key: catalogKey,
+        extra: [{ name: 'skip', isRequired: false }]
+      });
+    }
   }
   
   // Remove the 'key' property before returning (it's internal)
@@ -3402,7 +3893,7 @@ function getManifest(filterOptions, showCounts = true, catalogData = null, hidde
 
   return {
     id: 'community.animestream',
-    version: '1.2.1',
+    version: '1.3.0',
     name: 'AnimeStream',
     description: 'All your favorite Anime series and movies with filtering by genre, seasonal releases, currently airing and ratings. Stream both SUB and DUB options via AllAnime.',
     // CRITICAL: Use explicit resource objects with types and idPrefixes
@@ -3451,7 +3942,7 @@ function parseConfig(configStr) {
   const config = { 
     excludeLongRunning: false, 
     showCounts: true, 
-    hiddenCatalogs: [], 
+    selectedCatalogs: ['top', 'season', 'airing', 'movies'], // Default: all 4 standard catalogs
     anilistToken: '', 
     malToken: '', 
     userId: '',
@@ -3459,11 +3950,12 @@ function parseConfig(configStr) {
     debridProvider: '',
     debridApiKey: '',
     // Stream source settings
-    enableTorrents: true,
+    streamMode: 'both', // 'https', 'torrents', 'both'
     enableAllAnime: true,
     preferRaw: false,
     // Subtitle preferences
-    subtitleLanguages: ['en', 'ja']
+    subtitleLanguages: ['en', 'ja'],
+    subdlApiKey: ''
   };
   
   if (!configStr) return config;
@@ -3482,6 +3974,20 @@ function parseConfig(configStr) {
     config.showCounts = false;
   }
   
+  // Pre-extract sc= value BEFORE general parsing (since it contains underscores like mal_Watching)
+  const scMatch = decodedConfigStr.match(/\bsc=([^&|.]+)/i);
+  if (scMatch) {
+    config.selectedCatalogs = scMatch[1].split(',')
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
+  }
+  
+  // Pre-extract uid= value BEFORE general parsing (since it contains underscores like al_7671660)
+  const uidMatch = decodedConfigStr.match(/\buid=([^&|.]+)/i);
+  if (uidMatch) {
+    config.userId = decodeURIComponent(uidMatch[1]);
+  }
+  
   // Parse key-value pairs (use original string to preserve case for API keys)
   const params = decodedConfigStr.split(/[._|&]/);
   for (const param of params) {
@@ -3494,18 +4000,15 @@ function parseConfig(configStr) {
       config.showCounts = lv !== '0' && lv !== 'false';
     }
     if (key === 'hc' && value) {
-      // Hidden catalogs: comma-separated list (e.g., hc=top,movies)
-      // Valid values: top, season, airing, movies
+      // Legacy: Hidden catalogs converted to selected catalogs
       const validCatalogs = ['top', 'season', 'airing', 'movies'];
-      config.hiddenCatalogs = value.split(',')
+      const hidden = value.split(',')
         .map(c => c.trim().toLowerCase())
-        .filter(c => validCatalogs.includes(c))
-        .slice(0, 3); // Max 3 hidden (at least 1 must remain)
+        .filter(c => validCatalogs.includes(c));
+      // Convert hidden to selected (inverse)
+      config.selectedCatalogs = validCatalogs.filter(c => !hidden.includes(c));
     }
-    if (key === 'uid' && value) {
-      // User ID for token storage lookup (e.g., uid=abc123)
-      config.userId = decodeURIComponent(value);
-    }
+    // Note: sc= and uid= are parsed above the loop to preserve underscores
     // Legacy: direct token in URL (deprecated, use uid instead)
     if (key === 'al' && value) {
       config.anilistToken = decodeURIComponent(value);
@@ -3526,9 +4029,16 @@ function parseConfig(configStr) {
       // Debrid API key (CASE SENSITIVE - AllDebrid keys are case-sensitive!)
       config.debridApiKey = decodeURIComponent(value);
     }
-    // Stream source toggles
+    // Stream mode (new) - replaces enableTorrents
+    if (key === 'sm' && value) {
+      const lowerValue = value.toLowerCase();
+      if (['https', 'torrents', 'both'].includes(lowerValue)) {
+        config.streamMode = lowerValue;
+      }
+    }
+    // Legacy: tor=0 means https only
     if (key === 'tor' && (value.toLowerCase() === '0' || value.toLowerCase() === 'false')) {
-      config.enableTorrents = false;
+      config.streamMode = 'https';
     }
     if (key === 'aa' && (value.toLowerCase() === '0' || value.toLowerCase() === 'false')) {
       config.enableAllAnime = false;
@@ -3539,6 +4049,10 @@ function parseConfig(configStr) {
     // Subtitle languages
     if (key === 'slang' && value) {
       config.subtitleLanguages = value.split(',').map(l => l.trim().toLowerCase()).filter(Boolean);
+    }
+    // SubDL API key
+    if (key === 'sk' && value) {
+      config.subdlApiKey = decodeURIComponent(value);
     }
   }
   
@@ -4129,49 +4643,316 @@ function isRAWRelease(title) {
 
 /**
  * Extract episode information from a torrent title
- * Returns: { episode: number|null, season: number|null, isBatch: boolean, batchRange: [start, end]|null }
+ * Returns: { episode: number|null, season: number|null, isBatch: boolean, batchRange: [start, end]|null, isAbsolute: boolean }
+ * 
+ * Handles many patterns including:
+ * - S01E05, S1E5, 1x05 (Western style with season)
+ * - Season 8 Episode 1, Season 8 Ep 1, Season 8: Episode 1
+ * - Season 8 Episodes 1-11 (batch with season)
+ * - [01-12], (01~12), 01-24 Complete (batch)
+ * - " - 05", Episode 05, #05 (anime absolute numbering)
+ * - 2nd Season, Part 2, II (ordinal/roman seasons)
+ * - Episode title without number (rejected as undetectable)
  */
 function extractEpisodeInfo(title) {
-  const result = { episode: null, season: null, isBatch: false, batchRange: null };
+  const result = { 
+    episode: null, 
+    season: null, 
+    isBatch: false, 
+    batchRange: null, 
+    isAbsolute: false,
+    contentType: 'episode', // 'episode' | 'movie' | 'special' | 'batch'
+    year: null,
+    movieNumber: null,
+    specialNumber: null
+  };
   if (!title) return result;
   
-  // Normalize title for matching
-  const normalized = title.replace(/\s+/g, ' ');
+  // Normalize title: decode HTML entities, replace underscores with spaces, collapse multiple spaces
+  const normalized = title
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   
-  // BATCH/SEASON PACK DETECTION - check this first
-  // Patterns like [01-12], (01~12), 01-12 Complete, Batch, etc.
-  // NOTE: Be careful not to match "S2 - 05" or "86 - 03" patterns
-  const batchPatterns = [
-    /[\[\(](\d{1,3})\s*[-~]\s*(\d{1,3})[\]\)]/i,                              // [01-12], (01~12) - MUST have brackets
-    /\b(\d{1,3})\s*[-~]\s*(\d{1,3})\s*(?:END|Complete|Batch|Fin)\b/i,         // 01-12 Complete, 01~24 Batch - requires keyword
-    /\b(?:Complete|Batch|全话|Season\s*Pack)\b/i,                              // Explicit batch keywords
-    /\b(?:Vol(?:ume)?\.?\s*\d+\s*[-~]\s*\d+|BD\s*Box)\b/i,                    // Volume releases, BD Box
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 0: DETECT CONTENT TYPE (Movie, Special, etc.)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Detect MOVIES
+  const moviePatterns = [
+    /\b(?:Movie|Film|Gekijouban|劇場版|Gekijō-ban)\b/i,
+    /\b(?:Mugen\s*Train|Infinity\s*Castle|World\s*Heroes|Two\s*Heroes|Heroes\s*Rising|You'?re\s*Next)\b/i,
+    /\bthe\s*movie\b/i
   ];
   
-  for (const pattern of batchPatterns) {
+  const isMovie = moviePatterns.some(p => p.test(normalized));
+  
+  // Movie with number: "Movie 04"
+  const movieNumMatch = normalized.match(/\bMovie\s*0?(\d{1,2})\b/i);
+  if (movieNumMatch) {
+    result.contentType = 'movie';
+    result.movieNumber = parseInt(movieNumMatch[1], 10);
+  } else if (isMovie) {
+    result.contentType = 'movie';
+  }
+  
+  // Detect year in movie titles (allow year at end or followed by brackets)
+  const yearMatch = normalized.match(/\b(20[0-2][0-9])\b(?![0-9]|p\b)/);
+  if (yearMatch && result.contentType === 'movie') {
+    result.year = parseInt(yearMatch[1], 10);
+  }
+  
+  // Detect SPECIALS (OVA, ONA, OAV, Special)
+  const specialPatterns = [
+    /\b(?:OVA|ONA|OAV|OAD)\s*0?(\d{1,2})?\b/i,
+    /\bSpecial\s*0?(\d{1,2})?\b/i,
+    /\bSP\s*0?(\d{1,2})\b/i,
+    /\b(?:Extra|Bonus|Omake|Picture\s*Drama)\b/i
+  ];
+  
+  for (const pattern of specialPatterns) {
     const match = normalized.match(pattern);
     if (match) {
-      result.isBatch = true;
-      // Extract range if available
-      if (match[1] && match[2]) {
-        const start = parseInt(match[1], 10);
-        const end = parseInt(match[2], 10);
-        if (start < end && end - start < 100) { // Sanity check
-          result.batchRange = [start, end];
-        }
+      result.contentType = 'special';
+      if (match[1]) {
+        result.specialNumber = parseInt(match[1], 10);
       }
       break;
     }
   }
   
-  // If it's a batch without a range, return early - we can't validate specific episodes
-  if (result.isBatch) {
+  // Detect PREVIEW/TRAILER (should be excluded from normal matching)
+  // Include NCOP/NCED with optional number suffix (NCOP01, NCED02)
+  if (/\b(?:Preview|Trailer|PV\d*|CM\d*|Teaser|NCOP\d*|NCED\d*)\b/i.test(normalized)) {
+    result.contentType = 'preview';
+    return result; // Don't try to match episodes for previews
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 1: EXTRACT SEASON from title (even if episode is extracted later)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Season patterns to extract season number regardless of episode format
+  const seasonPatterns = [
+    // "Season 8", "Season 08", "Season  8"
+    /\bSeason\s*0?(\d{1,2})\b/i,
+    // French: "Saison 2"
+    /\bSaison\s*0?(\d{1,2})\b/i,
+    // "S8", "S08", "S 1" (with optional space, but not S01E05)
+    /\bS\s*0?(\d{1,2})(?!\s*E|\d)/i,
+    // "8th Season", "1st Season", "2nd Season", "3rd Season"
+    /\b(\d{1,2})(?:st|nd|rd|th)\s*Season\b/i,
+    // "Part 2", "Part 1" (often used as season equivalent)
+    /\bPart\s*0?(\d{1,2})\b/i,
+    // "Cour 2", "Cour 1" (anime broadcast term)
+    /\bCour\s*0?(\d{1,2})\b/i,
+    // "2nd Part", "3rd Cour" 
+    /\b(\d{1,2})(?:st|nd|rd|th)\s*(?:Part|Cour)\b/i,
+    // Roman numerals: II, III, IV (up to X=10)
+    /\s(I{1,3}|IV|VI{0,3}|IX|X)(?:\s|$|\]|\))/,
+  ];
+  
+  // Try to extract season
+  for (const pattern of seasonPatterns) {
+    const match = normalized.match(pattern);
+    if (match) {
+      if (pattern.source.includes('I{1,3}')) {
+        // Roman numeral conversion
+        const romanMap = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 };
+        result.season = romanMap[match[1]] || null;
+      } else {
+        result.season = parseInt(match[1], 10);
+      }
+      break;
+    }
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 2: BATCH/SEASON PACK DETECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // "Season X Episodes Y-Z" or "Season X Ep Y-Z" pattern
+  const seasonEpisodesMatch = normalized.match(/\bSeason\s*0?(\d{1,2})\s*(?:Episodes?|Eps?\.?)\s*(\d{1,3})\s*[-~]\s*(\d{1,3})\b/i);
+  if (seasonEpisodesMatch) {
+    result.isBatch = true;
+    result.season = parseInt(seasonEpisodesMatch[1], 10);
+    const start = parseInt(seasonEpisodesMatch[2], 10);
+    const end = parseInt(seasonEpisodesMatch[3], 10);
+    if (start <= end && end - start < 100) {
+      result.batchRange = [start, end];
+    }
     return result;
   }
   
-  // EPISODE EXTRACTION - from most specific to least specific
+  // "S01 [01-12]" or "Season 1 (01-12)" - season followed by episode range in brackets
+  const seasonPackMatch = normalized.match(/\b(?:S0?(\d{1,2})|Season\s*(\d{1,2}))\b.*?[\[\(](\d{1,3})\s*[-~]\s*(\d{1,3})[\]\)]/i);
+  if (seasonPackMatch) {
+    result.isBatch = true;
+    result.season = parseInt(seasonPackMatch[1] || seasonPackMatch[2], 10);
+    const start = parseInt(seasonPackMatch[3], 10);
+    const end = parseInt(seasonPackMatch[4], 10);
+    if (start <= end && end - start < 100) {
+      result.batchRange = [start, end];
+    }
+    return result;
+  }
   
-  // Pattern 1: S01E05 / S1E5 format (Western style)
+  // "(Season 8)" or "[Season 8]" alone without episode - entire season batch
+  const seasonOnlyMatch = normalized.match(/[\[\(]Season\s*0?(\d{1,2})[\]\)]/i);
+  if (seasonOnlyMatch) {
+    result.isBatch = true;
+    result.season = parseInt(seasonOnlyMatch[1], 10);
+    return result;
+  }
+  
+  // Multi-season: "S1-S7", "Season 1-8", "Seasons 1~4", "S1+S2+S3", "S01-04P1"
+  const multiSeasonMatch = normalized.match(/\b(?:S0?(\d{1,2})\s*[-~]\s*S0?(\d{1,2})|Seasons?\s*(\d{1,2})\s*[-~]\s*(\d{1,2}))\b/i);
+  if (multiSeasonMatch) {
+    result.isBatch = true;
+    result.season = null;
+    result.isMultiSeason = true;
+    return result;
+  }
+  
+  // Multi-season with + separator: "S1+S2+S3", "S01+S02+Movies"
+  const multiSeasonPlusMatch = normalized.match(/\bS0?(\d{1,2})\s*\+\s*S0?(\d{1,2})/i);
+  if (multiSeasonPlusMatch) {
+    result.isBatch = true;
+    result.season = null;
+    result.isMultiSeason = true;
+    return result;
+  }
+  
+  // Multi-season range without S prefix: "S01-04" meaning Season 1-4 (when followed by P or nothing else)
+  const seasonRangeMatch = normalized.match(/\bS0?(\d{1,2})\s*-\s*0?(\d{1,2})(?:P|[+]|\s|$)/i);
+  if (seasonRangeMatch) {
+    const first = parseInt(seasonRangeMatch[1], 10);
+    const second = parseInt(seasonRangeMatch[2], 10);
+    // If second number is small (1-10), it's likely Season X-Y, not S01E04
+    if (second <= 10 && second > first) {
+      result.isBatch = true;
+      result.season = null;
+      result.isMultiSeason = true;
+      return result;
+    }
+  }
+  
+  // Explicit batch keywords - but try to extract episode range first
+  const batchKeywords = /\b(?:Complete|Batch|全话|全集|Season\s*Pack|Full\s*Season|BD\s*Box|Boxset)\b/i;
+  if (batchKeywords.test(normalized)) {
+    result.isBatch = true;
+    // Try to extract episode range before returning
+    const batchRangeMatch = normalized.match(/(?:\s-\s|[\[\(])0?(\d{1,4})\s*[-~]\s*0?(\d{1,4})(?:\s|[\]\)\[]|$)/);
+    if (batchRangeMatch) {
+      const start = parseInt(batchRangeMatch[1], 10);
+      const end = parseInt(batchRangeMatch[2], 10);
+      if (start < end && end - start >= 2 && end - start < 200) {
+        result.batchRange = [start, end];
+      }
+    }
+    return result;
+  }
+  
+  // Single season with BD/BDRip/Bluray indicator (full season releases)
+  // e.g., "[Judas] Boku no Hero Academia (Season 1) [BD 1080p]"
+  const bdSeasonMatch = normalized.match(/\b(?:Season|S)\s*0?(\d{1,2})\b.*?\b(?:BD|BDRip|Blu-?ray|WEB-DL)\s*(?:\d{3,4}p)?\s*[\]\)]/i);
+  if (bdSeasonMatch && !normalized.match(/E0?\d{1,4}/i) && !normalized.match(/\s-\s\d{1,4}(?:\s|$|\[|\()/)) {
+    // Has season + BD indicator but no episode number = full season release
+    result.isBatch = true;
+    result.season = parseInt(bdSeasonMatch[1], 10);
+    return result;
+  }
+  
+  // "(Season X Part Y)" pattern - indicates partial season batch
+  const seasonPartMatch = normalized.match(/\bSeason\s*0?(\d{1,2})\s*Part\s*0?(\d{1,2})\b/i);
+  if (seasonPartMatch) {
+    result.isBatch = true;
+    result.season = parseInt(seasonPartMatch[1], 10);
+    return result;
+  }
+  
+  // S01 with quality indicator but NO episode = season pack
+  // e.g., "[HorribleRips] My Hero Academia S1 [720p]", "Solo Leveling - S01 (BD 1080p)"
+  // Also handles: "Solo Leveling S02 BDRIP 1080p", "S 1 dvd"
+  const seasonQualityOnlyMatch = normalized.match(/\bS\s*0?(\d{1,2})\b(?!\s*E|\s*-\s*\d{1,4}(?:\s|\[|$))/i);
+  if (seasonQualityOnlyMatch && !normalized.match(/E0?\d{1,4}/i) && !normalized.match(/\s-\s\d{1,4}(?:\s|\[|\(|$)/)) {
+    result.isBatch = true;
+    result.season = parseInt(seasonQualityOnlyMatch[1], 10);
+    return result;
+  }
+  
+  // French "saison X & Y" multi-season
+  const frenchMultiSeason = normalized.match(/\bsaison\s*(\d+)\s*[&+]\s*(\d+)/i);
+  if (frenchMultiSeason) {
+    result.isBatch = true;
+    result.isMultiSeason = true;
+    return result;
+  }
+  
+  // Episode range without brackets: "1100-1155", "01-26", "1089-1100.5"
+  const epRangeNoBrackets = normalized.match(/(?:\s|^)(\d{1,4})\s*[-~]\s*(\d{1,4}(?:\.\d)?)(?:\s|\[|$)/i);
+  if (epRangeNoBrackets) {
+    const start = parseInt(epRangeNoBrackets[1], 10);
+    const end = parseFloat(epRangeNoBrackets[2]);
+    // Valid range: start < end, reasonable span, not resolution (1920-1080)
+    if (start < end && end - start >= 2 && end - start < 200 && start > 0 && start !== 1920 && end !== 1080) {
+      result.isBatch = true;
+      result.batchRange = [start, Math.ceil(end)];
+      return result;
+    }
+  }
+  
+  // Episode range in brackets: [01-12], (01~24), [01-28 Fin]
+  const rangeMatch = normalized.match(/[\[\(](\d{1,3})\s*[-~]\s*(\d{1,3})(?:\s*(?:Fin|End))?[\]\)]/i);
+  if (rangeMatch) {
+    const start = parseInt(rangeMatch[1], 10);
+    const end = parseInt(rangeMatch[2], 10);
+    if (start < end && end - start >= 2 && end - start < 100) {
+      result.isBatch = true;
+      result.batchRange = [start, end];
+      return result;
+    }
+  }
+  
+  // Range without brackets after dash: "- 01-100", "- 01 ~ 26"
+  const dashRangeMatch = normalized.match(/\s-\s0?(\d{1,3})\s*[-~]\s*0?(\d{1,3})(?:\s|\[|\(|$)/);
+  if (dashRangeMatch) {
+    const start = parseInt(dashRangeMatch[1], 10);
+    const end = parseInt(dashRangeMatch[2], 10);
+    if (start < end && end - start >= 2 && end - start < 100) {
+      result.isBatch = true;
+      result.batchRange = [start, end];
+      return result;
+    }
+  }
+  
+  // Range with keywords: "01-12 Complete", "01~24 END"
+  const rangeKeywordMatch = normalized.match(/\b(\d{1,3})\s*[-~]\s*(\d{1,3})\s*(?:END|Complete|Batch|Fin)\b/i);
+  if (rangeKeywordMatch) {
+    result.isBatch = true;
+    const start = parseInt(rangeKeywordMatch[1], 10);
+    const end = parseInt(rangeKeywordMatch[2], 10);
+    if (start < end && end - start < 100) {
+      result.batchRange = [start, end];
+    }
+    return result;
+  }
+  
+  // Volume releases: "Vol.1-4", "Volume 1~3"
+  const volMatch = normalized.match(/\bVol(?:ume)?\.?\s*(\d+)\s*[-~]\s*(\d+)\b/i);
+  if (volMatch) {
+    result.isBatch = true;
+    return result;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 3: SINGLE EPISODE EXTRACTION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Pattern 1: S01E05 / S1E5 / S01 E05 format (Western style) - most specific
   const sxeMatch = normalized.match(/\bS0?(\d{1,2})\s*E0?(\d{1,4})(?:v\d+)?(?!\d)/i);
   if (sxeMatch) {
     result.season = parseInt(sxeMatch[1], 10);
@@ -4179,49 +4960,398 @@ function extractEpisodeInfo(title) {
     return result;
   }
   
-  // Pattern 2: Anime standard " - 05" or " - 05v2" (e.g., "[SubsPlease] Frieren - 05 (1080p).mkv")
+  // Pattern 1b: S1 - 04 format (season prefix, dash, episode) - common in fansub batches
+  // e.g., "[Judas] Boku no Hero Academia S1 - 04.mkv"
+  const sDashMatch = normalized.match(/\bS0?(\d{1,2})\s*-\s*0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (sDashMatch) {
+    result.season = parseInt(sDashMatch[1], 10);
+    result.episode = parseInt(sDashMatch[2], 10);
+    return result;
+  }
+  
+  // Pattern 2: 1x05 format (alternative Western style)
+  const xMatch = normalized.match(/\b(\d{1,2})x(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (xMatch) {
+    result.season = parseInt(xMatch[1], 10);
+    result.episode = parseInt(xMatch[2], 10);
+    return result;
+  }
+  
+  // Pattern 3: "Season X Episode Y" / "Season X Ep Y" / "Season X: Episode Y" / "Season X - Episode Y"
+  const seasonEpMatch = normalized.match(/\bSeason\s*0?(\d{1,2})\s*(?:[-:]?\s*)?(?:Episode|Ep\.?)\s*0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (seasonEpMatch) {
+    result.season = parseInt(seasonEpMatch[1], 10);
+    result.episode = parseInt(seasonEpMatch[2], 10);
+    return result;
+  }
+  
+  // Pattern 4: "Season X - Y" where Y is episode number (e.g., "Season 8 - 01")
+  const seasonDashMatch = normalized.match(/\bSeason\s*0?(\d{1,2})\s*-\s*0?(\d{1,3})(?:v\d+)?(?!\d)/i);
+  if (seasonDashMatch) {
+    result.season = parseInt(seasonDashMatch[1], 10);
+    result.episode = parseInt(seasonDashMatch[2], 10);
+    return result;
+  }
+  
+  // === ABSOLUTE NUMBERING (no season in episode marker) ===
+  
+  // Pattern 5: Anime standard " - 05" or " - 05v2" (e.g., "[SubsPlease] Frieren - 05 (1080p).mkv")
   const dashEpMatch = normalized.match(/\s-\s0?(\d{1,4})(?:v\d+)?(?:\s|\(|\[|$)/);
   if (dashEpMatch) {
     result.episode = parseInt(dashEpMatch[1], 10);
+    result.isAbsolute = true;
     return result;
   }
   
-  // Pattern 3: Episode 05 / Ep.05 / Ep 5
-  const epWordMatch = normalized.match(/\bE(?:p(?:isode)?)?\.?\s*0?(\d{1,4})(?:v\d+)?(?!\d)/i);
-  if (epWordMatch) {
-    result.episode = parseInt(epWordMatch[1], 10);
-    return result;
-  }
-  
-  // Pattern 4: [05] or (05) - common in older fansub releases
-  const bracketEpMatch = normalized.match(/[\[\(]0?(\d{1,3})(?:v\d+)?[\]\)]/);
-  if (bracketEpMatch) {
-    // Avoid matching resolution like [1080] or years like [2024]
-    const num = parseInt(bracketEpMatch[1], 10);
-    if (num < 1000 && num > 0) {
-      result.episode = num;
+  // Pattern 6: "Episode 05" / "Ep.05" / "Ep 5" (standalone, not after Season)
+  // But NOT "Season X Episode Y" which was already handled
+  if (!normalized.match(/\bSeason\s*\d/i)) {
+    const epWordMatch = normalized.match(/\b(?:Episode|Ep\.?)\s*0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+    if (epWordMatch) {
+      result.episode = parseInt(epWordMatch[1], 10);
+      result.isAbsolute = true;
       return result;
     }
   }
   
-  // Pattern 5: "_05_" or ".05." (underscore/dot separated)
-  const sepEpMatch = normalized.match(/[._]0?(\d{1,3})(?:v\d+)?[._]/);
-  if (sepEpMatch) {
-    const num = parseInt(sepEpMatch[1], 10);
-    if (num < 500 && num > 0) { // Sanity check for episode numbers
-      result.episode = num;
-      return result;
-    }
-  }
-  
-  // Pattern 6: #05 or 第05話 (Japanese episode marker)
+  // Pattern 7: #05 or 第05話 or 第05回 (Japanese episode marker)
   const jpEpMatch = normalized.match(/(?:#|第)0?(\d{1,4})(?:話|回|v\d+)?/);
   if (jpEpMatch) {
     result.episode = parseInt(jpEpMatch[1], 10);
+    result.isAbsolute = true;
     return result;
   }
   
+  // Pattern 8: [05] or (05) - common in older fansub releases
+  // But avoid [1080], [2024], [720p], etc.
+  const bracketEpMatch = normalized.match(/[\[\(]0?(\d{1,3})(?:v\d+)?[\]\)](?!\s*(?:p|P)\b)/);
+  if (bracketEpMatch) {
+    const num = parseInt(bracketEpMatch[1], 10);
+    // Must be reasonable episode number (not year, not resolution)
+    if (num > 0 && num < 500 && num !== 720 && num !== 1080 && num !== 480 && num !== 360) {
+      // Check if it looks like a year (19xx, 20xx)
+      if (num < 1900 || num > 2100) {
+        result.episode = num;
+        result.isAbsolute = true;
+        return result;
+      }
+    }
+  }
+  
+  // Pattern 9: "_05_" or ".05." (underscore/dot separated)
+  const sepEpMatch = normalized.match(/[._]0?(\d{1,3})(?:v\d+)?[._]/);
+  if (sepEpMatch) {
+    const num = parseInt(sepEpMatch[1], 10);
+    if (num > 0 && num < 500) {
+      result.episode = num;
+      result.isAbsolute = true;
+      return result;
+    }
+  }
+  
+  // Pattern 10: "E05" standalone (not part of SxE)
+  const eOnlyMatch = normalized.match(/\bE0?(\d{1,4})(?:v\d+)?(?!\d)/i);
+  if (eOnlyMatch && !normalized.match(/\bS\d+\s*E\d/i)) {
+    result.episode = parseInt(eOnlyMatch[1], 10);
+    result.isAbsolute = true;
+    return result;
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEP 4: SPECIAL CASE - Episode with title but no number
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // "Season 8: The End of an Era" - has season but episode is a title not number
+  // We detect this but can't extract episode number, so it fails validation
+  if (result.season !== null && normalized.match(/(?:Episode|Ep\.?)[:\s]+[A-Za-z]/i)) {
+    // Season detected but episode is a title - can't validate
+    return result; // episode stays null
+  }
+  
+  // Pattern 11: Trailing episode number - "Title 1100 [" or "Title 1100 ("
+  // Common in fansub releases after underscore normalization
+  const trailingEpMatch = normalized.match(/\s(\d{2,4})(?:\s*[\[\(]|$)/);
+  if (trailingEpMatch) {
+    const num = parseInt(trailingEpMatch[1], 10);
+    // Must be reasonable episode number (not resolution like 1080, 720, 1920, etc.)
+    if (num > 0 && num < 2000 && num !== 720 && num !== 1080 && num !== 480 && num !== 360 && 
+        num !== 1920 && num !== 2160 && num !== 4320) {
+      result.episode = num;
+      result.isAbsolute = true;
+      return result;
+    }
+  }
+  
   return result;
+}
+
+/**
+ * Normalize an anime title for comparison
+ * Removes common suffixes, punctuation, and standardizes format
+ */
+function normalizeAnimeTitle(title) {
+  if (!title) return '';
+  return title
+    .toLowerCase()
+    .replace(/[:\-–—'"!?,\.]+/g, ' ')                    // Punctuation to space
+    .replace(/\s+(the|a|an)\s+/gi, ' ')                  // Remove articles
+    .replace(/\s+/g, ' ')                                // Normalize whitespace
+    .replace(/\s*(season|part|cour)\s*\d+.*$/i, '')      // Remove "Season X" suffix
+    .replace(/\s*(ii|iii|iv|v|vi|vii|viii|ix|x)$/i, '')  // Remove roman numeral suffix
+    .replace(/\s*[2-9]nd?\s*(season)?$/i, '')            // Remove "2nd Season" suffix
+    .replace(/\s*\d+(st|nd|rd|th)\s*(season)?$/i, '')    // Remove ordinal season suffix
+    .trim();
+}
+
+// Note: stringSimilarity() is already defined earlier in the file (around line 3682)
+// We reuse that function for show title matching
+
+/**
+ * Extract anime name from torrent title
+ * Handles various fansub naming conventions
+ * Goal: Extract JUST the anime name, removing all metadata
+ */
+function extractAnimeNameFromTorrent(title) {
+  if (!title) return '';
+  
+  // Remove release group: [SubsPlease], [Erai-raws], etc.
+  let cleaned = title.replace(/^\[[^\]]+\]\s*/g, '');
+  
+  // Remove ALL bracketed content: [1080p], (HEVC), [Dual Audio], etc.
+  cleaned = cleaned.replace(/[\[\(][^\]\)]*[\]\)]/g, ' ');
+  
+  // Remove season/episode patterns FIRST (before other cleanup)
+  cleaned = cleaned.replace(/\s+S0?\d+E0?\d+/gi, ' ');                     // S01E05, S1E5
+  cleaned = cleaned.replace(/\s+S0?\d+\b/gi, ' ');                         // S01, S1 standalone
+  cleaned = cleaned.replace(/\s+\d+x\d+/gi, ' ');                          // 1x05
+  cleaned = cleaned.replace(/\s+-\s+\d+(?:v\d+)?(?:\s|$)/g, ' ');          // " - 05"
+  cleaned = cleaned.replace(/\s+(?:Episode|Ep\.?)\s*\d+/gi, ' ');          // "Episode 05"
+  cleaned = cleaned.replace(/\bSeason\s*\d+/gi, ' ');                      // "Season 1", "Season 01"
+  cleaned = cleaned.replace(/\b\d+(?:st|nd|rd|th)\s*Season\b/gi, ' ');     // "1st Season", "6th Season"
+  cleaned = cleaned.replace(/\b\d+(?:st|nd|rd|th)\s*Cour\b/gi, ' ');       // "1st Cour"
+  cleaned = cleaned.replace(/\bPart\s*\d+/gi, ' ');                        // "Part 2"
+  cleaned = cleaned.replace(/\bCour\s*\d+/gi, ' ');                        // "Cour 2"
+  
+  // Remove common metadata patterns
+  cleaned = cleaned.replace(/\b(?:BD|BDREMUX|WEB-DL|WEBRip|HDTV|BluRay|BDRip)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b(?:HEVC|x265|x264|AV1|H\.?264|H\.?265|10bit|Hi10P)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b(?:AAC|FLAC|AC3|DTS|Opus|TrueHD)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b(?:Dual\s*Audio|Multi\s*Audio|English\s*Dub|Dub\s*Ita)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b\d+p\b/gi, ' ');                            // 1080p, 720p
+  cleaned = cleaned.replace(/\b(?:Complete|Batch|END|Fin|Extras)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b(?:VOSTFR|SoftSub|HardSub|Multi\s*Subs?)\b/gi, ' ');
+  
+  // Remove file extension
+  cleaned = cleaned.replace(/\.(mkv|mp4|avi|webm)$/i, '');
+  
+  // Remove trailing episode numbers that weren't caught
+  cleaned = cleaned.replace(/\s+\d{1,3}(?:v\d+)?$/g, '');
+  
+  // Remove hash codes like [5bbb1483]
+  cleaned = cleaned.replace(/\[[a-f0-9]{6,10}\]/gi, '');
+  
+  // Normalize whitespace and punctuation
+  cleaned = cleaned.replace(/[-_]/g, ' ');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
+
+/**
+ * Known spinoff/sequel indicators that change the show identity
+ * These words after the main title indicate a DIFFERENT show
+ */
+const SPINOFF_INDICATORS = [
+  'vigilantes', 'vigilante',
+  'shippuden', 'shippuuden',
+  'super', 'gt', 'z', 'kai',
+  'zero', 're',
+  'brotherhood',
+  'origins', 'origin',
+  'gaiden',
+  'after story', 'afterstory',
+  'movie', 'film',
+  'ova', 'ona', 'special', 'specials',
+  'recap',
+  'illegals'
+];
+
+/**
+ * Score how well a torrent title matches the expected anime
+ * Returns a score from 0-100 where:
+ * - 100 = Perfect match (exact match with main name or synonym)
+ * - 90+ = Very high confidence match
+ * - 70-89 = Good match (fuzzy/partial)
+ * - 50-69 = Uncertain match
+ * - <50 = Likely different show
+ * 
+ * @param {string} torrentTitle - Full torrent title
+ * @param {string} expectedAnimeName - Main anime name (usually English)
+ * @param {Array} synonyms - Alternative names (Japanese, romanized, etc.)
+ * @returns {{ score: number, reason: string, extractedName: string }}
+ */
+function scoreShowMatch(torrentTitle, expectedAnimeName, synonyms = []) {
+  const extractedName = extractAnimeNameFromTorrent(torrentTitle);
+  const normalizedExtracted = normalizeAnimeTitle(extractedName);
+  
+  if (!normalizedExtracted || normalizedExtracted.length < 2) {
+    return { score: 0, reason: 'empty_extraction', extractedName };
+  }
+  
+  // Build list of all acceptable names (main + synonyms)
+  // All of these should score 100 on exact match
+  const acceptableNames = new Set();
+  
+  // Add main name
+  const normalizedMain = normalizeAnimeTitle(expectedAnimeName);
+  if (normalizedMain) acceptableNames.add(normalizedMain);
+  
+  // Add all synonyms (these include Japanese names, romanizations, etc.)
+  if (synonyms && Array.isArray(synonyms)) {
+    for (const syn of synonyms) {
+      const normalized = normalizeAnimeTitle(syn);
+      if (normalized && normalized.length > 2) {
+        acceptableNames.add(normalized);
+      }
+    }
+  }
+  
+  const acceptableArray = Array.from(acceptableNames);
+  
+  // === EXACT MATCH CHECK (Score: 100) ===
+  if (acceptableNames.has(normalizedExtracted)) {
+    return { score: 100, reason: 'exact_match', extractedName };
+  }
+  
+  // === CONTAINMENT CHECKS ===
+  let bestContainmentScore = 0;
+  let containmentReason = '';
+  
+  for (const acceptable of acceptableArray) {
+    // Check if extracted name contains an acceptable name
+    if (normalizedExtracted.includes(acceptable)) {
+      const afterMatch = normalizedExtracted.substring(
+        normalizedExtracted.indexOf(acceptable) + acceptable.length
+      ).trim();
+      
+      // Nothing after = almost exact match
+      if (afterMatch.length === 0) {
+        if (bestContainmentScore < 98) {
+          bestContainmentScore = 98;
+          containmentReason = 'contains_exact_end';
+        }
+        continue;
+      }
+      
+      // Check for spinoff indicators
+      const hasSpinoff = SPINOFF_INDICATORS.some(indicator => 
+        afterMatch.toLowerCase().startsWith(indicator)
+      );
+      
+      if (hasSpinoff) {
+        // This is likely a spinoff - very low score
+        if (bestContainmentScore < 20) {
+          bestContainmentScore = 20;
+          containmentReason = 'spinoff_detected';
+        }
+        continue;
+      }
+      
+      // Has something after but not a spinoff - could be season/metadata remnants
+      // Score based on how much extra content there is
+      const extraRatio = afterMatch.length / normalizedExtracted.length;
+      const containScore = Math.max(70, Math.round(95 - (extraRatio * 30)));
+      if (containScore > bestContainmentScore) {
+        bestContainmentScore = containScore;
+        containmentReason = 'contains_with_extra';
+      }
+    }
+    
+    // Check if acceptable name contains extracted name (shortened torrent title)
+    if (acceptable.includes(normalizedExtracted) && normalizedExtracted.length > 4) {
+      const coverageRatio = normalizedExtracted.length / acceptable.length;
+      const shortScore = Math.round(60 + (coverageRatio * 35)); // 60-95 based on coverage
+      if (shortScore > bestContainmentScore) {
+        bestContainmentScore = shortScore;
+        containmentReason = 'shortened_title';
+      }
+    }
+  }
+  
+  if (bestContainmentScore > 0) {
+    return { score: bestContainmentScore, reason: containmentReason, extractedName };
+  }
+  
+  // === FUZZY SIMILARITY CHECK ===
+  let bestSimilarity = 0;
+  for (const acceptable of acceptableArray) {
+    const similarity = stringSimilarity(normalizedExtracted, acceptable);
+    bestSimilarity = Math.max(bestSimilarity, similarity);
+  }
+  
+  // Convert similarity (0-1) to score (0-100) with threshold
+  if (bestSimilarity >= 0.9) {
+    return { score: Math.round(bestSimilarity * 100), reason: 'high_similarity', extractedName };
+  }
+  if (bestSimilarity >= 0.7) {
+    return { score: Math.round(bestSimilarity * 95), reason: 'fuzzy_match', extractedName };
+  }
+  
+  // === WORD-BASED MATCHING ===
+  const extractedWords = normalizedExtracted.split(' ').filter(w => w.length > 2);
+  
+  let bestWordScore = 0;
+  for (const acceptable of acceptableArray) {
+    const acceptableWords = acceptable.split(' ').filter(w => w.length > 2);
+    
+    if (acceptableWords.length === 0) continue;
+    
+    // Count how many words from the acceptable name appear in extracted
+    let matchedWords = 0;
+    for (const aw of acceptableWords) {
+      if (extractedWords.some(ew => ew === aw || ew.includes(aw) || aw.includes(ew))) {
+        matchedWords++;
+      }
+    }
+    
+    const wordMatchRatio = matchedWords / acceptableWords.length;
+    const wordScore = Math.round(wordMatchRatio * 80); // Max 80 for word matching
+    bestWordScore = Math.max(bestWordScore, wordScore);
+  }
+  
+  if (bestWordScore >= 60) {
+    return { score: bestWordScore, reason: 'word_match', extractedName };
+  }
+  
+  // === NO GOOD MATCH ===
+  // Return whatever fuzzy similarity we found (likely low)
+  return { 
+    score: Math.round(bestSimilarity * 50), // Cap at 50 for no-match cases
+    reason: 'no_match', 
+    extractedName 
+  };
+}
+
+/**
+ * Check if torrent title matches the expected anime (wrapper for backward compatibility)
+ * Uses scoreShowMatch internally with a threshold
+ * 
+ * @param {string} torrentTitle - Full torrent title
+ * @param {string} expectedAnimeName - Main anime name
+ * @param {Array} synonyms - Alternative names
+ * @param {number} threshold - Minimum score to consider a match (default: 60)
+ * @returns {{ matches: boolean, confidence: number, reason: string }}
+ */
+function validateTorrentShowMatch(torrentTitle, expectedAnimeName, synonyms = [], threshold = 60) {
+  const result = scoreShowMatch(torrentTitle, expectedAnimeName, synonyms);
+  
+  return {
+    matches: result.score >= threshold,
+    confidence: result.score / 100,
+    reason: result.reason,
+    score: result.score,
+    extractedName: result.extractedName
+  };
 }
 
 /**
@@ -4231,12 +5361,77 @@ function extractEpisodeInfo(title) {
  * @param {number} requestedSeason - Season number (1 = first season)
  * @returns {{ matches: boolean, reason: string, info: object }}
  */
-function validateTorrentEpisode(title, requestedEpisode, requestedSeason = 1) {
+function validateTorrentEpisode(title, requestedEpisode, requestedSeason = 1, contentTypeHint = null) {
   const info = extractEpisodeInfo(title);
   
-  // Batch/season packs are valid - file selection happens at debrid resolution
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONTENT TYPE HANDLING
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // Skip previews/trailers entirely
+  if (info.contentType === 'preview') {
+    return { matches: false, reason: 'preview_trailer_excluded', info };
+  }
+  
+  // MOVIE CONTENT: When user requests a movie (contentTypeHint='movie'), accept movie torrents
+  if (contentTypeHint === 'movie') {
+    if (info.contentType === 'movie') {
+      // If movie has a number and episode was provided, match it
+      if (info.movieNumber && requestedEpisode) {
+        if (info.movieNumber === requestedEpisode) {
+          return { matches: true, reason: 'movie_number_match', info };
+        }
+        return { matches: false, reason: 'movie_number_mismatch', info };
+      }
+      // Otherwise, just accept the movie torrent (show match will filter)
+      return { matches: true, reason: 'movie_content_match', info };
+    }
+    // If user wants movie but torrent is episode, skip
+    return { matches: false, reason: 'expected_movie_got_episode', info };
+  }
+  
+  // SPECIAL CONTENT: When user requests S00Exx (specials), accept special torrents
+  if (requestedSeason === 0 || contentTypeHint === 'special') {
+    if (info.contentType === 'special') {
+      if (info.specialNumber && requestedEpisode) {
+        if (info.specialNumber === requestedEpisode) {
+          return { matches: true, reason: 'special_number_match', info };
+        }
+        return { matches: false, reason: 'special_number_mismatch', info };
+      }
+      return { matches: true, reason: 'special_content_match', info };
+    }
+    // Check S00Exx episode number
+    if (info.season === 0 && info.episode === requestedEpisode) {
+      return { matches: true, reason: 'season_0_episode_match', info };
+    }
+  }
+  
+  // If torrent is a movie/special but user wants regular episode, reject
+  if (info.contentType === 'movie' && contentTypeHint !== 'movie') {
+    return { matches: false, reason: 'movie_not_requested', info };
+  }
+  if (info.contentType === 'special' && requestedSeason !== 0 && contentTypeHint !== 'special') {
+    return { matches: false, reason: 'special_not_requested', info };
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BATCH/SEASON PACK HANDLING
+  // ═══════════════════════════════════════════════════════════════════════════
+  
   if (info.isBatch) {
-    // If we have a range, validate the episode is within it
+    // CRITICAL: Check season mismatch first for batches that have a detected season
+    // This prevents "Season 8 Episodes 1-11" from matching when user wants Season 1
+    if (info.season !== null && info.season !== requestedSeason) {
+      return { matches: false, reason: 'batch_season_mismatch', info };
+    }
+    
+    // Multi-season batches (S1-S7) - these are too broad, reject them
+    if (info.isMultiSeason) {
+      return { matches: false, reason: 'multi_season_batch_rejected', info };
+    }
+    
+    // If we have an episode range, validate the episode is within it
     if (info.batchRange) {
       const [start, end] = info.batchRange;
       if (requestedEpisode >= start && requestedEpisode <= end) {
@@ -4245,9 +5440,14 @@ function validateTorrentEpisode(title, requestedEpisode, requestedSeason = 1) {
         return { matches: false, reason: 'batch_episode_out_of_range', info };
       }
     }
-    // Unknown range - allow it (we'll select file later)
+    
+    // Unknown range but season matches (or no season detected) - allow it (we'll select file later)
     return { matches: true, reason: 'batch_unknown_range', info };
   }
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // REGULAR EPISODE HANDLING
+  // ═══════════════════════════════════════════════════════════════════════════
   
   // If we couldn't extract episode info, reject (strict mode)
   if (info.episode === null) {
@@ -4269,17 +5469,34 @@ function validateTorrentEpisode(title, requestedEpisode, requestedSeason = 1) {
 }
 
 /**
- * Filter torrents to only include those matching the requested episode
+ * Filter torrents to only include those matching the requested episode AND show
  * @param {Array} torrents - Array of torrent objects with 'title' field
  * @param {number} episode - Requested episode number
  * @param {number} season - Requested season number
+ * @param {string} animeName - Expected anime name (optional but recommended)
+ * @param {Array} synonyms - Alternative names for the anime (optional)
+ * @param {number} showMatchThreshold - Minimum score for show match (default: 60)
  * @returns {Array} Filtered torrents with match info
  */
-function filterTorrentsByEpisode(torrents, episode, season = 1) {
+function filterTorrentsByEpisode(torrents, episode, season = 1, animeName = null, synonyms = [], showMatchThreshold = 60, contentTypeHint = null) {
   const filtered = [];
   
   for (const torrent of torrents) {
-    const validation = validateTorrentEpisode(torrent.title, episode, season);
+    // First, validate the show title matches (if animeName provided)
+    if (animeName) {
+      const showMatch = validateTorrentShowMatch(torrent.title, animeName, synonyms, showMatchThreshold);
+      if (!showMatch.matches) {
+        console.log(`[Show Filter] Rejected (score: ${showMatch.score}): "${torrent.title.substring(0, 55)}..." - ${showMatch.reason} (extracted: "${showMatch.extractedName}", wanted: "${animeName}")`);
+        continue; // Skip to next torrent
+      }
+      // Log accepted matches with their score for debugging
+      if (showMatch.score < 90) {
+        console.log(`[Show Filter] Accepted (score: ${showMatch.score}): "${torrent.title.substring(0, 55)}..." - ${showMatch.reason}`);
+      }
+    }
+    
+    // Then validate the episode/content matches
+    const validation = validateTorrentEpisode(torrent.title, episode, season, contentTypeHint);
     
     if (validation.matches) {
       // Add match info to torrent for later use (e.g., batch file selection)
@@ -4289,7 +5506,24 @@ function filterTorrentsByEpisode(torrents, episode, season = 1) {
         _matchReason: validation.reason
       });
     } else {
-      console.log(`[Episode Filter] Rejected: "${torrent.title.substring(0, 60)}..." - ${validation.reason} (detected: E${validation.info.episode}${validation.info.season ? ' S' + validation.info.season : ''})`);
+      // Build informative debug string
+      const info = validation.info;
+      let detected = '';
+      if (info.contentType === 'movie') {
+        detected = `Movie${info.movieNumber ? ' #' + info.movieNumber : ''}${info.year ? ' (' + info.year + ')' : ''}`;
+      } else if (info.contentType === 'special') {
+        detected = `Special${info.specialNumber ? ' #' + info.specialNumber : ''}`;
+      } else if (info.isBatch) {
+        detected = `Batch S${info.season || '?'}`;
+        if (info.batchRange) detected += ` [${info.batchRange[0]}-${info.batchRange[1]}]`;
+        if (info.isMultiSeason) detected += ' (multi-season)';
+      } else {
+        detected = `E${info.episode || '?'}`;
+        if (info.season) detected = `S${info.season}${detected}`;
+        if (info.isAbsolute) detected += ' (abs)';
+      }
+      const wantedStr = contentTypeHint === 'movie' ? 'Movie' : `S${season}E${episode}`;
+      console.log(`[Episode Filter] Rejected: "${torrent.title.substring(0, 70)}..." - ${validation.reason} (detected: ${detected}, wanted: ${wantedStr})`);
     }
   }
   
@@ -4479,7 +5713,8 @@ async function scrapeNyaa(animeName, episode = null, season = 1) {
       if (torrents.length > 0) break;
     }
     
-    // Sort by seeders (most seeded first) then by quality
+    // Sort by: 1) Quality, 2) Seeders (most seeded first)
+    // Note: Cache status (⚡) sorting happens later when we have debrid info
     const qualityOrder = { '4K': 0, '1080p': 1, '720p': 2, '480p': 3, 'Unknown': 4 };
     torrents.sort((a, b) => {
       const qualityDiff = qualityOrder[a.quality] - qualityOrder[b.quality];
@@ -4491,7 +5726,7 @@ async function scrapeNyaa(animeName, episode = null, season = 1) {
     let validatedTorrents = torrents;
     if (episode) {
       const beforeCount = torrents.length;
-      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season, animeName);
       console.log(`[Nyaa] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
     }
     
@@ -4623,7 +5858,7 @@ async function scrapeAnimeTosho(animeName, episode = null, season = 1) {
     let validatedTorrents = torrents;
     if (episode) {
       const beforeCount = torrents.length;
-      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season, animeName);
       console.log(`[AnimeTosho] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
     }
     
@@ -4645,9 +5880,10 @@ async function scrapeAnimeTosho(animeName, episode = null, season = 1) {
  * @param {number} anidbId - The AniDB ID to search for
  * @param {number} episode - Optional specific episode number
  * @param {number} season - Season number for multi-season shows
+ * @param {string} animeName - Optional anime name for additional filtering
  * @returns {Promise<Array>} Array of torrent objects
  */
-async function scrapeAnimeToshoByAniDbId(anidbId, episode = null, season = 1) {
+async function scrapeAnimeToshoByAniDbId(anidbId, episode = null, season = 1, animeName = null) {
   if (!anidbId) {
     console.log('[AnimeTosho-AniDB] No AniDB ID provided');
     return [];
@@ -4741,10 +5977,12 @@ async function scrapeAnimeToshoByAniDbId(anidbId, episode = null, season = 1) {
     });
     
     // EPISODE VALIDATION: Filter to only torrents matching requested episode
+    // Note: AniDB-based search is already accurate, but we still validate episode patterns
+    // Pass animeName if available for additional show title validation
     let validatedTorrents = torrents;
     if (episode) {
       const beforeCount = torrents.length;
-      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season);
+      validatedTorrents = filterTorrentsByEpisode(torrents, episode, season, animeName);
       console.log(`[AnimeTosho-AniDB] Episode validation: ${validatedTorrents.length}/${beforeCount} torrents match E${episode} S${season}`);
     }
     
@@ -4939,6 +6177,24 @@ const DEBRID_PROVIDERS = {
     name: 'Debrid-Link',
     shortName: 'DL',
     apiBaseUrl: 'https://debrid-link.com/api/v2'
+  },
+  easydebrid: {
+    key: 'easydebrid',
+    name: 'EasyDebrid',
+    shortName: 'ED',
+    apiBaseUrl: 'https://easydebrid.com/api/v1'
+  },
+  offcloud: {
+    key: 'offcloud',
+    name: 'Offcloud',
+    shortName: 'OC',
+    apiBaseUrl: 'https://offcloud.com/api'
+  },
+  putio: {
+    key: 'putio',
+    name: 'Put.io',
+    shortName: 'PI',
+    apiBaseUrl: 'https://api.put.io/v2'
   }
 };
 
@@ -4970,7 +6226,7 @@ async function checkRealDebridCache(infoHash, apiKey) {
 /**
  * Add magnet to Real-Debrid and get download link
  */
-async function resolveRealDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1) {
+async function resolveRealDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1, expectedAnimeName = '') {
   try {
     // Step 1: Add magnet
     const addResponse = await fetch('https://api.real-debrid.com/rest/1.0/torrents/addMagnet', {
@@ -5244,9 +6500,9 @@ async function checkDebridCacheBatch(infoHashes, provider, apiKey) {
  * Add magnet to AllDebrid and get download link
  * IMPROVED: Fail fast for non-cached torrents, better magnet handling
  */
-async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1) {
+async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, season = 1, expectedAnimeName = '') {
   try {
-    console.log(`[AD Resolve] Starting resolution for magnet${episode ? ` (looking for S${season}E${episode})` : ''}`);
+    console.log(`[AD Resolve] Starting resolution for magnet${episode ? ` (looking for S${season}E${episode})` : ''}${expectedAnimeName ? ` (expecting: "${expectedAnimeName}")` : ''}`);
     
     // Step 1: Upload magnet (POST method)
     const uploadResponse = await fetch(
@@ -5288,7 +6544,7 @@ async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, s
     // If already ready (cached), get files directly - FAST PATH
     if (magnetInfo.ready === true) {
       console.log(`[AD Resolve] Magnet already cached, getting files`);
-      return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season);
+      return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season, expectedAnimeName);
     }
     
     // NOT CACHED - Let AllDebrid download it and poll for completion
@@ -5334,7 +6590,7 @@ async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, s
       // Status 4 = Ready
       if (statusCode === 4) {
         console.log(`[AD Resolve] Download complete! Getting files...`);
-        return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season);
+        return await getAllDebridFiles(magnetId, apiKey, fileIndex, episode, season, expectedAnimeName);
       }
       
       // Status >= 5 = Error
@@ -5360,10 +6616,66 @@ async function resolveAllDebrid(magnet, apiKey, fileIndex = 0, episode = null, s
 }
 
 /**
+ * Check if a filename likely matches the expected anime
+ * Uses fuzzy matching to detect mislabeled torrents
+ * @param {string} filename - The video filename
+ * @param {string} expectedName - The expected anime name
+ * @returns {boolean} True if file seems to match, false if likely mislabeled
+ */
+function validateFileMatchesAnime(filename, expectedName) {
+  if (!expectedName || !filename) return true; // Skip validation if no name available
+  
+  // Normalize both names for comparison
+  const normalizeForMatch = (str) => str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '') // Remove special chars
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim();
+  
+  const normFile = normalizeForMatch(filename);
+  const normExpected = normalizeForMatch(expectedName);
+  
+  // Direct substring check (handles "Re Zero" matching "ReZero" after normalization)
+  // Remove all spaces for a condensed comparison too
+  const condensedFile = normFile.replace(/\s+/g, '');
+  const condensedExpected = normExpected.replace(/\s+/g, '');
+  
+  // If condensed names match or one contains the other, it's valid
+  if (condensedFile.includes(condensedExpected) || condensedExpected.includes(condensedFile)) {
+    return true;
+  }
+  
+  // Check if any significant word from expected name appears in filename
+  const expectedWords = normExpected.split(' ').filter(w => w.length > 2);
+  const matchingWords = expectedWords.filter(word => normFile.includes(word));
+  
+  // If at least 30% of significant words match, consider it valid
+  const matchRatio = matchingWords.length / Math.max(expectedWords.length, 1);
+  
+  // Also check for common anime title patterns
+  // e.g., "Ranma" in file when expecting "Dan Da Dan" = mismatch
+  if (matchRatio < 0.3) {
+    console.log(`[AD Validation] ⚠️ Potential mislabel detected!`);
+    console.log(`[AD Validation]   Expected: "${expectedName}" → words: [${expectedWords.join(', ')}]`);
+    console.log(`[AD Validation]   File: "${filename}"`);
+    console.log(`[AD Validation]   Matching words: [${matchingWords.join(', ')}] (${(matchRatio * 100).toFixed(0)}%)`);
+    return false;
+  }
+  
+  return true;
+}
+
+/**
  * Get files from AllDebrid magnet and unlock the video link
  * Implements smart file selection for batch torrents based on episode number
+ * @param {string} magnetId - The AllDebrid magnet ID
+ * @param {string} apiKey - The AllDebrid API key
+ * @param {number} fileIndex - Preferred file index (fallback)
+ * @param {number} episode - Target episode number
+ * @param {number} season - Target season number
+ * @param {string} expectedAnimeName - The anime name we expect (for validation)
  */
-async function getAllDebridFiles(magnetId, apiKey, fileIndex = 0, episode = null, season = 1) {
+async function getAllDebridFiles(magnetId, apiKey, fileIndex = 0, episode = null, season = 1, expectedAnimeName = '') {
   try {
     // Get files using /magnet/files endpoint
     const filesResponse = await fetch(
@@ -5459,6 +6771,21 @@ async function getAllDebridFiles(magnetId, apiKey, fileIndex = 0, episode = null
     
     console.log(`[AD Files] Selected: ${selectedFile.filename}`);
     
+    // VALIDATION: Check if the selected file actually matches the expected anime
+    // This catches mislabeled torrents (e.g., torrent says "Dan Da Dan" but files are "Ranma")
+    if (expectedAnimeName && !validateFileMatchesAnime(selectedFile.filename, expectedAnimeName)) {
+      console.error(`[AD Files] ❌ MISLABELED TORRENT DETECTED!`);
+      console.error(`[AD Files]   Expected anime: "${expectedAnimeName}"`);
+      console.error(`[AD Files]   Actual file: "${selectedFile.filename}"`);
+      
+      // Return a special error status so we can show user a helpful message
+      return { 
+        status: 'mislabeled', 
+        message: `Torrent appears mislabeled: expected "${expectedAnimeName}" but file is "${selectedFile.filename}". Try a different torrent source.`,
+        filename: selectedFile.filename
+      };
+    }
+    
     // Unlock the link (POST method)
     const unlockResponse = await fetch(
       `https://api.alldebrid.com/v4/link/unlock`,
@@ -5489,7 +6816,7 @@ async function getAllDebridFiles(magnetId, apiKey, fileIndex = 0, episode = null
 /**
  * Resolve magnet to direct link using configured debrid provider
  */
-async function resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex = 0, episode = null, season = 1) {
+async function resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex = 0, episode = null, season = 1, expectedAnimeName = '') {
   // Include episode in cache key for batch torrents
   const cacheKey = `debrid:${provider}:${infoHash}:${episode || 'all'}`;
   
@@ -5512,10 +6839,10 @@ async function resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex = 0, 
   
   switch (provider) {
     case 'realdebrid':
-      result = await resolveRealDebrid(magnet, apiKey, fileIndex, episode, season);
+      result = await resolveRealDebrid(magnet, apiKey, fileIndex, episode, season, expectedAnimeName);
       break;
     case 'alldebrid':
-      result = await resolveAllDebrid(magnet, apiKey, fileIndex, episode, season);
+      result = await resolveAllDebrid(magnet, apiKey, fileIndex, episode, season, expectedAnimeName);
       break;
     // Add more providers as needed
     default:
@@ -5547,6 +6874,54 @@ function buildDebridPlayUrl(baseUrl, infoHash, magnet, provider, apiKey, fileInd
 // ===== SOFT SUBTITLE INTEGRATION =====
 
 /**
+ * Generate folder name patterns to try for Kitsunekko
+ * Kitsunekko uses inconsistent folder naming, so we try multiple patterns
+ */
+function generateKitsunekkoPatterns(animeName) {
+  const patterns = [];
+  
+  // Clean the base name (remove special characters but keep spaces)
+  const baseName = animeName.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+  
+  // Pattern 1: Original with spaces (e.g., "Dan Da Dan")
+  if (baseName) patterns.push(baseName);
+  
+  // Pattern 2: With underscores (e.g., "Dan_Da_Dan") 
+  const underscored = baseName.replace(/\s+/g, '_');
+  if (underscored !== baseName) patterns.push(underscored);
+  
+  // Pattern 3: No spaces (e.g., "DanDaDan")
+  const noSpaces = baseName.replace(/\s+/g, '');
+  if (noSpaces !== baseName) patterns.push(noSpaces);
+  
+  // Pattern 4: Lowercase with spaces
+  const lowerSpaces = baseName.toLowerCase();
+  if (lowerSpaces !== baseName) patterns.push(lowerSpaces);
+  
+  // Pattern 5: Lowercase with underscores
+  const lowerUnderscored = underscored.toLowerCase();
+  if (!patterns.includes(lowerUnderscored)) patterns.push(lowerUnderscored);
+  
+  // Pattern 6: Title case (first letter of each word capitalized)
+  const titleCase = baseName.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.substr(1).toLowerCase());
+  if (!patterns.includes(titleCase)) patterns.push(titleCase);
+  
+  // Pattern 7: Handle "X: Y" becoming "X Y" or just "X"
+  if (animeName.includes(':')) {
+    const beforeColon = animeName.split(':')[0].replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+    if (beforeColon && !patterns.includes(beforeColon)) patterns.push(beforeColon);
+  }
+  
+  // Pattern 8: Handle parenthetical part removal "X (Y)" -> "X"
+  if (animeName.includes('(')) {
+    const withoutParens = animeName.replace(/\s*\([^)]*\)/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+    if (withoutParens && !patterns.includes(withoutParens)) patterns.push(withoutParens);
+  }
+  
+  return patterns;
+}
+
+/**
  * Scrape subtitles from Kitsunekko (Japanese/English anime subs)
  * @param {string} animeName - The anime name to search for
  * @returns {Promise<Array>} Array of subtitle objects
@@ -5572,23 +6947,42 @@ async function scrapeKitsunekko(animeName) {
   const subtitles = [];
   
   try {
-    // Kitsunekko directory listing
-    const cleanName = animeName.replace(/[^\w\s]/g, '').replace(/\s+/g, '_');
-    const url = `https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F${encodeURIComponent(cleanName)}%2F`;
+    // Generate multiple folder name patterns to try
+    const patterns = generateKitsunekkoPatterns(animeName);
+    console.log(`[Kitsunekko] Trying ${patterns.length} patterns for "${animeName}"`);
     
-    console.log(`[Kitsunekko] Searching: ${url}`);
+    let html = null;
+    let successfulPattern = null;
     
-    const response = await fetch(url, {
-      headers: buildBrowserHeaders(),
-      cf: { cacheTtl: 3600, cacheEverything: true }
-    });
-    
-    if (!response.ok) {
-      // Try alternate path formats
-      return [];
+    // Try each pattern until one works
+    for (const pattern of patterns) {
+      const url = `https://kitsunekko.net/dirlist.php?dir=subtitles%2Fjapanese%2F${encodeURIComponent(pattern)}%2F`;
+      
+      console.log(`[Kitsunekko] Trying: ${pattern}`);
+      
+      const response = await fetch(url, {
+        headers: buildBrowserHeaders(),
+        cf: { cacheTtl: 3600, cacheEverything: true }
+      });
+      
+      if (!response.ok) continue;
+      
+      const text = await response.text();
+      
+      // Check if response contains subtitle files (not just an empty directory)
+      if (/href="[^"]+\.(ass|srt|ssa|sub)"/i.test(text)) {
+        html = text;
+        successfulPattern = pattern;
+        console.log(`[Kitsunekko] Found subtitles with pattern: "${pattern}"`);
+        break;
+      }
     }
     
-    const html = await response.text();
+    if (!html) {
+      console.log(`[Kitsunekko] No subtitles found for "${animeName}" (tried ${patterns.length} patterns)`);
+      subtitleCache.set(cacheKey, { data: [], timestamp: Date.now() });
+      return [];
+    }
     
     // Parse directory listing for subtitle files
     const fileRegex = /href="([^"]+\.(ass|srt|ssa|sub))"[^>]*>([^<]+)</gi;
@@ -5707,12 +7101,12 @@ async function searchOpenSubtitles(imdbId, season, episode, languages = ['en']) 
 /**
  * Get all subtitles for an anime episode from multiple sources
  */
-async function getSubtitles(animeName, imdbId, season, episode, languages = ['en', 'ja']) {
+async function getSubtitles(animeName, imdbId, season, episode, languages = ['en', 'ja'], subdlApiKey = '') {
   // Fetch from both sources in parallel
   const [kitsunekkoSubs, openSubs, subdlSubs] = await Promise.all([
     scrapeKitsunekko(animeName),
     imdbId ? searchOpenSubtitles(imdbId, season, episode, languages) : Promise.resolve([]),
-    searchSubDL(animeName, season, episode, languages)
+    searchSubDL(animeName, season, episode, languages, imdbId, subdlApiKey)
   ]);
   
   // Filter Kitsunekko subs by episode
@@ -5721,9 +7115,17 @@ async function getSubtitles(animeName, imdbId, season, episode, languages = ['en
   // Combine and deduplicate
   const combined = [...episodeSubs, ...openSubs, ...subdlSubs];
   
-  // Sort: Japanese subs first (for RAW content), then by language preference
+  // Sort by: 1) SRT format first (better customization), 2) Language preference
+  // SRT subtitles allow custom formatting/scaling which is easier on the eyes vs SSA/ASS
+  const formatOrder = { 'srt': 0, 'vtt': 0, 'sub': 1, 'ssa': 2, 'ass': 2 };
   const langOrder = { 'jpn': 0, 'ja': 0, 'eng': 1, 'en': 1 };
   combined.sort((a, b) => {
+    // First prioritize SRT format
+    const aFormat = formatOrder[a.format?.toLowerCase()] ?? 99;
+    const bFormat = formatOrder[b.format?.toLowerCase()] ?? 99;
+    if (aFormat !== bFormat) return aFormat - bFormat;
+    
+    // Then by language
     const aOrder = langOrder[a.lang] ?? 99;
     const bOrder = langOrder[b.lang] ?? 99;
     return aOrder - bOrder;
@@ -5734,14 +7136,16 @@ async function getSubtitles(animeName, imdbId, season, episode, languages = ['en
 
 /**
  * Search subtitles from SubDL API (good anime coverage)
- * @param {string} animeName - Anime name to search
+ * @param {string} animeNameOrImdbId - Anime name or IMDB ID to search
  * @param {number} season - Season number
  * @param {number} episode - Episode number
  * @param {Array} languages - Array of language codes
+ * @param {string} imdbId - Optional IMDB ID for more accurate search
+ * @param {string} subdlApiKey - User's SubDL API key from config
  * @returns {Promise<Array>} Array of subtitle objects
  */
-async function searchSubDL(animeName, season, episode, languages = ['en']) {
-  const cacheKey = `subdl:${animeName}:${season}:${episode}`;
+async function searchSubDL(animeNameOrImdbId, season, episode, languages = ['en'], imdbId = null, subdlApiKey = '') {
+  const cacheKey = `subdl:${animeNameOrImdbId}:${season}:${episode}`;
   
   // Check cache
   const cached = subtitleCache.get(cacheKey);
@@ -5752,12 +7156,24 @@ async function searchSubDL(animeName, season, episode, languages = ['en']) {
   const subtitles = [];
   
   try {
-    // SubDL search API
-    const cleanName = animeName.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
-    const query = `${cleanName} S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
-    const url = `https://api.subdl.com/api/v1/subtitles?subs_per_page=30&type=tv&query=${encodeURIComponent(query)}`;
+    // SubDL requires API key - users can get free key from subdl.com/panel/apikey
+    if (!subdlApiKey) {
+      console.log(`[SubDL] Skipping - no API key configured (get one at subdl.com/panel/apikey)`);
+      return [];
+    }
     
-    console.log(`[SubDL] Searching: ${url}`);
+    // Determine if we have an IMDB ID (from parameter or if animeNameOrImdbId looks like one)
+    const effectiveImdbId = imdbId || (animeNameOrImdbId?.startsWith('tt') ? animeNameOrImdbId : null);
+    
+    // SubDL requires IMDB ID for TV shows (not name search)
+    if (!effectiveImdbId || !effectiveImdbId.startsWith('tt')) {
+      console.log(`[SubDL] Skipping - no valid IMDB ID (got: ${effectiveImdbId})`);
+      return [];
+    }
+    
+    const url = `https://api.subdl.com/api/v1/subtitles?api_key=${subdlApiKey}&subs_per_page=30&type=tv&imdb_id=${effectiveImdbId.replace('tt', '')}&season_number=${season}&episode_number=${episode}`;
+    
+    console.log(`[SubDL] Searching: ${url.replace(subdlApiKey, '***')}`);
     
     const response = await fetch(url, {
       headers: buildBrowserHeaders(),
@@ -5995,32 +7411,39 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
   
   // Fetch streams directly from AllAnime API
   try {
-    const streams = await getEpisodeSources(showId, absoluteEpisode);
-    
-    // Format streams for Stremio - use proxy for URLs requiring Referer header
-    // NOTE: workerBaseUrl is now defined at the top of handleStream
-    
     const formattedStreams = [];
     
-    // Add AllAnime streams (hardsubbed)
-    if (streams && streams.length > 0) {
-      for (const stream of streams) {
-        // Proxy URLs that require Referer header (fast4speed)
-        let streamUrl = stream.url;
-        if (stream.url.includes('fast4speed')) {
-          streamUrl = `${workerBaseUrl}/proxy/${encodeURIComponent(stream.url)}`;
+    // Check stream mode to determine what to fetch
+    const includeTorrents = config.streamMode === 'torrents' || config.streamMode === 'both';
+    const includeHttps = config.streamMode === 'https' || config.streamMode === 'both';
+    
+    // Add AllAnime streams (hardsubbed) - only if HTTPS streams are enabled
+    if (includeHttps) {
+      const streams = await getEpisodeSources(showId, absoluteEpisode);
+      
+      // Format streams for Stremio - use proxy for URLs requiring Referer header
+      // NOTE: workerBaseUrl is now defined at the top of handleStream
+      
+      if (streams && streams.length > 0) {
+        for (const stream of streams) {
+          // Proxy URLs that require Referer header (fast4speed)
+          let streamUrl = stream.url;
+          if (stream.url.includes('fast4speed')) {
+            streamUrl = `${workerBaseUrl}/proxy/${encodeURIComponent(stream.url)}`;
+          }
+          
+          formattedStreams.push({
+            name: `AnimeStream`,
+            title: `[SUB] ${stream.type || 'SUB'} - ${stream.quality || 'HD'}`,
+            url: streamUrl
+          });
         }
-        
-        formattedStreams.push({
-          name: `AnimeStream`,
-          title: `[SUB] ${stream.type || 'SUB'} - ${stream.quality || 'HD'}`,
-          url: streamUrl
-        });
       }
     }
     
-    // Fetch torrent streams for RAW content (only if user has debrid configured)
+    // Fetch torrent streams for RAW content (only if torrents are enabled)
     // Torrents will be shown with debrid resolution URLs
+    if (includeTorrents) {
     try {
       // Enrich anime object with AniDB ID, synonyms from id-mappings.json
       // This is critical for accurate torrent searching via AnimeTosho
@@ -6040,7 +7463,7 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
         // Batch check cache status for all torrents (if debrid configured)
         let cacheStatus = new Map();
         if (hasDebrid) {
-          const topTorrents = torrents.slice(0, 5);
+          const topTorrents = torrents.slice(0, 15);
           const hashes = topTorrents.map(t => t.infoHash).filter(Boolean);
           if (hashes.length > 0) {
             try {
@@ -6053,8 +7476,24 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
           }
         }
         
-        // Add top 5 torrent streams with cache status labels
-        for (const torrent of torrents.slice(0, 5)) {
+        // Sort torrents: cached (⚡) first, then by seeders within each group
+        // This ensures instant playback options appear at the top
+        const sortedTorrents = [...torrents].sort((a, b) => {
+          const aHash = a.infoHash?.toLowerCase();
+          const bHash = b.infoHash?.toLowerCase();
+          const aCached = cacheStatus.has(aHash) ? cacheStatus.get(aHash) === true : false;
+          const bCached = cacheStatus.has(bHash) ? cacheStatus.get(bHash) === true : false;
+          
+          // Cached first
+          if (aCached && !bCached) return -1;
+          if (!aCached && bCached) return 1;
+          
+          // Then by seeders (more seeders = better)
+          return (b.seeders || 0) - (a.seeders || 0);
+        });
+        
+        // Add top 15 torrent streams with cache status labels
+        for (const torrent of sortedTorrents.slice(0, 15)) {
           // Build clean title like Torrentio: "AnimeName - Quality\n👤 Seeders 💾 Size"
           const qualityLabel = torrent.quality !== 'Unknown' ? torrent.quality : '';
           const rawTag = torrent.isRaw ? ' [RAW]' : '';
@@ -6085,9 +7524,9 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
             const fullTitle = metaLine ? `${titleLine}\n${metaLine}` : titleLine;
             
             formattedStreams.push({
-              name: `${cacheEmoji} ${providerShort}`,
+              name: `${cacheEmoji} AnimeStream (${providerShort})`,
               title: fullTitle,
-              url: `${workerBaseUrl}/debrid/play?ih=${torrent.infoHash}&p=${config.debridProvider}&key=${encodeURIComponent(config.debridApiKey)}&ep=${absoluteEpisode}&s=${season}`,
+              url: `${workerBaseUrl}/debrid/play?ih=${torrent.infoHash}&p=${config.debridProvider}&key=${encodeURIComponent(config.debridApiKey)}&ep=${absoluteEpisode}&s=${season}&an=${encodeURIComponent(animeName)}`,
               behaviorHints: {
                 bingeGroup: `torrent-${showId}-${season}`
               }
@@ -6098,7 +7537,7 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
             const fullTitle = metaLine ? `${titleLine}\n${metaLine}\n⚠️ Requires Debrid` : `${titleLine}\n⚠️ Requires Debrid`;
             
             formattedStreams.push({
-              name: `🧲 Torrent`,
+              name: `🧲 AnimeStream`,
               title: fullTitle,
               // Link to configure page to set up debrid
               externalUrl: `${workerBaseUrl}/configure`,
@@ -6116,6 +7555,7 @@ async function handleStream(catalog, type, id, config = {}, requestUrl = null) {
       console.error(`[Stream] Torrent fetch error: ${torrentErr.message}`);
       // Continue without torrents
     }
+    } // End of includeTorrents check
     
     if (formattedStreams.length === 0) {
       return { streams: [] };
@@ -6213,6 +7653,7 @@ export default {
       const fileIndex = parseInt(url.searchParams.get('idx') || '0');
       const episode = url.searchParams.get('ep') ? parseInt(url.searchParams.get('ep')) : null;
       const season = url.searchParams.get('s') ? parseInt(url.searchParams.get('s')) : 1;
+      const expectedAnimeName = url.searchParams.get('an') ? decodeURIComponent(url.searchParams.get('an')) : '';
       
       if (!infoHash || !provider || !apiKey) {
         return jsonResponse({ 
@@ -6221,14 +7662,14 @@ export default {
         }, { status: 400 });
       }
       
-      console.log(`[Debrid Play] Resolving ${infoHash} via ${provider}${episode ? ` for S${season}E${episode}` : ''}`);
+      console.log(`[Debrid Play] Resolving ${infoHash} via ${provider}${episode ? ` for S${season}E${episode}` : ''}${expectedAnimeName ? ` (expecting: "${expectedAnimeName}")` : ''}`);
       
       try {
         // Build magnet from info hash WITH TRACKERS for better resolution
         const magnet = buildMagnetWithTrackers(infoHash);
         
         // Resolve via debrid provider - pass episode info for smart file selection
-        const result = await resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex, episode, season);
+        const result = await resolveDebrid(magnet, infoHash, provider, apiKey, fileIndex, episode, season, expectedAnimeName);
         
         // Handle "downloading" status - torrent not cached
         if (result && typeof result === 'object' && result.status === 'downloading') {
@@ -6238,6 +7679,17 @@ export default {
             message: result.message || 'This torrent is not cached on the debrid service. Choose a ⚡ cached torrent for instant playback.',
             hint: 'Look for streams marked with ⚡ (instant) instead of ⏳ (download)'
           }, { status: 503 }); // 503 = Service Unavailable (temporary)
+        }
+        
+        // Handle "mislabeled" status - torrent has wrong content
+        if (result && typeof result === 'object' && result.status === 'mislabeled') {
+          console.log(`[Debrid Play] Mislabeled torrent detected - returning error`);
+          return jsonResponse({ 
+            error: 'Mislabeled torrent',
+            message: result.message || 'This torrent appears to contain different content than expected.',
+            hint: 'Try a different torrent source - this one may have been mislabeled by the uploader.',
+            filename: result.filename
+          }, { status: 409 }); // 409 = Conflict (content mismatch)
         }
         
         if (!result || typeof result !== 'string') {
@@ -6375,7 +7827,7 @@ export default {
     if (manifestMatch) {
       const config = parseConfig(manifestMatch[1]);
       // Manifest cached for 24 hours - rarely changes
-      return jsonResponse(getManifest(filterOptions, config.showCounts, catalog, config.hiddenCatalogs, config), { 
+      return jsonResponse(getManifest(filterOptions, config.showCounts, catalog, config.selectedCatalogs, config), { 
         maxAge: MANIFEST_CACHE_TTL, 
         staleWhileRevalidate: 3600 
       });
@@ -6440,7 +7892,31 @@ export default {
           catalogResult = handleMovies(catalog, extra.genre);
           break;
         default:
-          return jsonResponse({ metas: [] }, { maxAge: 60 });
+          // Handle user list catalogs (AniList and MAL)
+          if (id.startsWith('anime-anilist-')) {
+            const listName = id.slice(14); // Remove 'anime-anilist-' prefix
+            // Fetch tokens from KV if userId is set
+            if (config.userId && env.USER_TOKENS) {
+              const tokens = await env.USER_TOKENS.get(config.userId, 'json');
+              if (tokens?.anilistToken) {
+                config.anilistToken = tokens.anilistToken;
+              }
+            }
+            catalogResult = await handleAniListCatalog(listName, config, catalog);
+          } else if (id.startsWith('anime-mal-')) {
+            const listName = id.slice(10); // Remove 'anime-mal-' prefix
+            // Fetch tokens from KV if userId is set
+            if (config.userId && env.USER_TOKENS) {
+              const tokens = await env.USER_TOKENS.get(config.userId, 'json');
+              if (tokens?.malToken) {
+                config.malToken = tokens.malToken;
+              }
+            }
+            catalogResult = await handleMalCatalog(listName, config, catalog);
+          } else {
+            return jsonResponse({ metas: [] }, { maxAge: 60 });
+          }
+          break;
       }
       
       const skip = parseInt(extra.skip) || 0;
@@ -6595,7 +8071,11 @@ export default {
       const config = parseConfig(configStr);
       
       // Parse ID - format: tt1234567:season:episode for series, tt1234567 for movies
-      const parts = id.split(':');
+      // Strip any extra path after the ID (e.g., /filename=... from video player)
+      // IMPORTANT: Decode URL-encoded characters first (%3A → :)
+      const decodedId = decodeURIComponent(id);
+      const cleanId = decodedId.split('/')[0];
+      const parts = cleanId.split(':');
       const imdbId = parts[0];
       const season = parts.length >= 2 ? parseInt(parts[1]) : 1;
       const episode = parts.length >= 3 ? parseInt(parts[2]) : 1;
@@ -6658,11 +8138,15 @@ export default {
         const anime = findAnimeById(catalog, imdbId);
         const animeName = anime?.name || anime?.title?.userPreferred || '';
         
+        console.log(`[Subtitles] Fetching for ${imdbId} S${season}E${episode}, anime: "${animeName}"`);
+        
         // Fetch subtitles from Kitsunekko and SubDL in parallel
         const [kitsunekkoSubs, subdlSubs] = await Promise.all([
           animeName ? scrapeKitsunekko(animeName) : Promise.resolve([]),
-          searchSubDL(animeName || imdbId, season, episode, config.subtitleLanguages || ['en'])
+          searchSubDL(animeName || imdbId, season, episode, config.subtitleLanguages || ['en'], imdbId, config.subdlApiKey)
         ]);
+        
+        console.log(`[Subtitles] Kitsunekko: ${kitsunekkoSubs.length}, SubDL: ${subdlSubs.length}`);
         
         // Filter Kitsunekko subs by episode if available
         const filteredKitsunekko = kitsunekkoSubs.filter(sub => 
@@ -6680,11 +8164,17 @@ export default {
           return true;
         });
         
-        const formattedSubs = uniqueSubs.map(sub => ({
-          id: sub.id,
-          url: sub.url,
-          lang: sub.lang === 'jpn' ? 'jpn' : sub.lang === 'eng' ? 'eng' : sub.lang,
-        }));
+        const formattedSubs = uniqueSubs.map(sub => {
+          // Build a descriptive label: "English (Kitsunekko)" or "English (SubDL)"
+          const langName = sub.lang === 'jpn' ? 'Japanese' : sub.lang === 'eng' ? 'English' : sub.lang;
+          const provider = sub.provider || 'Unknown';
+          
+          return {
+            id: sub.id,
+            url: sub.url,
+            lang: `${langName} (${provider})`,
+          };
+        });
         
         console.log(`[Subtitles] Found ${formattedSubs.length} subtitles for ${imdbId} S${season}E${episode}`);
         
@@ -6820,6 +8310,69 @@ export default {
       return jsonResponse({ user });
     }
     
+    // Get AniList user's anime lists - GET /api/anilist/lists
+    if (path === '/api/anilist/lists') {
+      const authHeader = request.headers.get('Authorization');
+      const token = authHeader?.replace('Bearer ', '');
+      
+      if (!token) {
+        return jsonResponse({ error: 'No token provided' }, { status: 401 });
+      }
+      
+      try {
+        // First get the user
+        const user = await getAnilistCurrentUser(token);
+        if (!user) {
+          return jsonResponse({ error: 'Invalid or expired token' }, { status: 401 });
+        }
+        
+        // Query for user's anime lists
+        const listsQuery = `
+          query ($userName: String) {
+            MediaListCollection(userName: $userName, type: ANIME) {
+              lists {
+                name
+                entries {
+                  mediaId
+                }
+              }
+            }
+          }
+        `;
+        
+        const response = await fetch(ANILIST_API_BASE, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            query: listsQuery,
+            variables: { userName: user.name }
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.errors) {
+          console.error('[AniList Lists] API error:', data.errors);
+          return jsonResponse({ lists: [] });
+        }
+        
+        const lists = data.data?.MediaListCollection?.lists || [];
+        const formattedLists = lists.map(list => ({
+          name: list.name,
+          count: list.entries?.length || 0
+        })).filter(list => list.count > 0);
+        
+        return jsonResponse({ lists: formattedLists });
+      } catch (error) {
+        console.error('[AniList Lists] Error:', error.message);
+        return jsonResponse({ error: 'Failed to fetch lists', message: error.message }, { status: 500 });
+      }
+    }
+    
     // MAL OAuth callback page - GET /mal/callback
     if (path === '/mal/callback' || path.startsWith('/mal/callback?')) {
       // Return a simple HTML page that will handle the OAuth code
@@ -6869,6 +8422,7 @@ export default {
     }
     
     // Get MAL user info - GET /api/mal/user
+    // Uses Jikan API (unofficial MAL API) - no rate limiting issues
     if (path === '/api/mal/user') {
       const authHeader = request.headers.get('Authorization');
       const token = authHeader?.replace('Bearer ', '');
@@ -6878,6 +8432,7 @@ export default {
       }
       
       try {
+        // First verify the token with MAL (we still need OAuth for scrobbling)
         const userResponse = await fetch('https://api.myanimelist.net/v2/users/@me', {
           headers: { 'Authorization': 'Bearer ' + token }
         });
@@ -6890,6 +8445,131 @@ export default {
         return jsonResponse({ user: { name: userData.name, id: userData.id } });
       } catch (error) {
         return jsonResponse({ error: 'Failed to fetch user', message: error.message }, { status: 500 });
+      }
+    }
+    
+    // Get MAL user's anime lists - GET /api/mal/lists
+    if (path === '/api/mal/lists') {
+      const authHeader = request.headers.get('Authorization');
+      const token = authHeader?.replace('Bearer ', '');
+      
+      if (!token) {
+        return jsonResponse({ error: 'No token provided' }, { status: 401 });
+      }
+      
+      try {
+        // MAL has standard lists: watching, completed, on_hold, dropped, plan_to_watch
+        const lists = [
+          { name: 'Watching', status: 'watching' },
+          { name: 'Completed', status: 'completed' },
+          { name: 'On Hold', status: 'on_hold' },
+          { name: 'Dropped', status: 'dropped' },
+          { name: 'Plan to Watch', status: 'plan_to_watch' }
+        ];
+        
+        const formattedLists = [];
+        
+        for (const list of lists) {
+          try {
+            const response = await fetch(`https://api.myanimelist.net/v2/users/@me/animelist?status=${list.status}&limit=1`, {
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              // MAL API doesn't give total count directly, but we can see if list has entries
+              if (data.data && data.data.length > 0) {
+                formattedLists.push({
+                  name: list.name,
+                  status: list.status,
+                  count: data.paging?.next ? '10+' : data.data.length
+                });
+              }
+            }
+          } catch {}
+        }
+        
+        return jsonResponse({ lists: formattedLists });
+      } catch (error) {
+        console.error('[MAL Lists] Error:', error.message);
+        return jsonResponse({ error: 'Failed to fetch lists', message: error.message }, { status: 500 });
+      }
+    }
+    
+    // Validate debrid API key - POST /api/debrid/validate
+    if (path === '/api/debrid/validate' && request.method === 'POST') {
+      try {
+        const { provider, apiKey } = await request.json();
+        
+        if (!provider || !apiKey) {
+          return jsonResponse({ valid: false, error: 'Missing provider or API key' }, { status: 400 });
+        }
+        
+        let isValid = false;
+        let error = null;
+        
+        // Validate based on provider
+        try {
+          if (provider === 'realdebrid') {
+            const res = await fetch('https://api.real-debrid.com/rest/1.0/user', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            isValid = res.ok;
+            if (!isValid) error = 'Invalid Real-Debrid API key';
+          } else if (provider === 'alldebrid') {
+            const res = await fetch('https://api.alldebrid.com/v4/user?agent=animestream', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            const data = await res.json();
+            isValid = data.status === 'success';
+            if (!isValid) error = data.error?.message || 'Invalid AllDebrid API key';
+          } else if (provider === 'premiumize') {
+            const res = await fetch('https://www.premiumize.me/api/account/info?apikey=' + encodeURIComponent(apiKey));
+            const data = await res.json();
+            isValid = data.status === 'success';
+            if (!isValid) error = data.message || 'Invalid Premiumize API key';
+          } else if (provider === 'torbox') {
+            const res = await fetch('https://api.torbox.app/v1/api/user/me', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            const data = await res.json();
+            isValid = data.success === true;
+            if (!isValid) error = data.detail || 'Invalid TorBox API key';
+          } else if (provider === 'debridlink') {
+            const res = await fetch('https://debrid-link.fr/api/v2/account/infos', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            const data = await res.json();
+            isValid = data.success === true;
+            if (!isValid) error = data.error || 'Invalid Debrid-Link API key';
+          } else if (provider === 'easydebrid') {
+            const res = await fetch('https://easydebrid.com/api/v1/user/details', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            isValid = res.ok;
+            if (!isValid) error = 'Invalid EasyDebrid API key';
+          } else if (provider === 'offcloud') {
+            const res = await fetch('https://offcloud.com/api/account/stats?apikey=' + encodeURIComponent(apiKey));
+            const data = await res.json();
+            isValid = !data.error;
+            if (!isValid) error = data.error || 'Invalid Offcloud API key';
+          } else if (provider === 'putio') {
+            const res = await fetch('https://api.put.io/v2/account/info', {
+              headers: { 'Authorization': 'Bearer ' + apiKey }
+            });
+            isValid = res.ok;
+            if (!isValid) error = 'Invalid Put.io API key';
+          } else {
+            return jsonResponse({ valid: false, error: 'Unknown provider' }, { status: 400 });
+          }
+        } catch (e) {
+          isValid = false;
+          error = 'Network error: ' + e.message;
+        }
+        
+        return jsonResponse({ valid: isValid, error: isValid ? null : error });
+      } catch (e) {
+        return jsonResponse({ valid: false, error: 'Invalid request body' }, { status: 400 });
       }
     }
     

@@ -492,11 +492,88 @@ async function enrichWithCinemeta(animeList) {
 }
 
 // ============================================================
-// JIKAN BROADCAST DATA
+// JIKAN BROADCAST DATA (fallback) + LIVECHART.ME (primary for schedules)
 // ============================================================
 
 const JIKAN_BASE_URL = 'https://api.jikan.moe/v4';
-const JIKAN_RATE_LIMIT_MS = 400;
+const JIKAN_RATE_LIMIT_MS = 100; // Jikan doesn't rate limit as much as MAL
+
+// LiveChart GraphQL API for accurate schedules
+const LIVECHART_API_URL = 'https://www.livechart.me/graphql';
+
+/**
+ * Fetch currently airing anime schedules from LiveChart.me
+ * LiveChart has the most accurate broadcast schedules
+ */
+async function fetchLiveChartSchedules() {
+  console.log('\n📺 Fetching schedules from LiveChart.me...');
+  
+  const fetch = (await import('node-fetch')).default;
+  
+  // GraphQL query for airing anime with schedules
+  const query = `
+    query {
+      airingAnimes(filter: {status: AIRING}) {
+        nodes {
+          databaseId
+          title
+          malId
+          anilistId
+          broadcastSchedule {
+            weekday
+            time
+          }
+        }
+      }
+    }
+  `;
+  
+  try {
+    const response = await fetch(LIVECHART_API_URL, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ query }),
+      timeout: 30000
+    });
+    
+    if (!response.ok) {
+      console.log(`   ⚠️  LiveChart returned ${response.status}, falling back to Jikan`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const animes = data?.data?.airingAnimes?.nodes || [];
+    
+    // Create lookup maps by MAL ID and AniList ID
+    const scheduleByMalId = new Map();
+    const scheduleByAnilistId = new Map();
+    
+    for (const anime of animes) {
+      const schedule = anime.broadcastSchedule;
+      if (schedule && schedule.weekday) {
+        // Convert weekday index to name (0=Sunday, 1=Monday, etc.)
+        const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const entry = {
+          day: weekdays[schedule.weekday] || null,
+          time: schedule.time || null
+        };
+        
+        if (anime.malId) scheduleByMalId.set(anime.malId, entry);
+        if (anime.anilistId) scheduleByAnilistId.set(anime.anilistId, entry);
+      }
+    }
+    
+    console.log(`   ✅ Loaded ${animes.length} airing anime schedules from LiveChart`);
+    return { scheduleByMalId, scheduleByAnilistId };
+    
+  } catch (err) {
+    console.log(`   ⚠️  LiveChart error: ${err.message}, falling back to Jikan`);
+    return null;
+  }
+}
 
 async function fetchJikanBroadcast(malId) {
   try {
@@ -516,39 +593,68 @@ async function fetchJikanBroadcast(malId) {
 }
 
 async function enrichWithJikanBroadcast(animeList) {
-  console.log('\n📺 Fetching broadcast schedules from Jikan (MAL API)...');
+  console.log('\n📺 Enriching broadcast schedules (LiveChart + Jikan fallback)...');
   
-  const ongoingAnime = animeList.filter(a => a.status === 'ONGOING' && a.mal_id);
+  const ongoingAnime = animeList.filter(a => a.status === 'ONGOING');
   
   if (ongoingAnime.length === 0) {
-    console.log('   No ongoing anime with MAL IDs found, skipping.\n');
-    return { total: 0, enriched: 0 };
+    console.log('   No ongoing anime found, skipping.\n');
+    return { total: 0, enriched: 0, fromLiveChart: 0, fromJikan: 0 };
   }
   
   console.log(`   Found ${ongoingAnime.length} ongoing anime to check...\n`);
   
+  // Try LiveChart first (faster and more accurate)
+  const liveChartData = await fetchLiveChartSchedules();
+  
   let enriched = 0;
+  let fromLiveChart = 0;
+  let fromJikan = 0;
   
   for (let i = 0; i < ongoingAnime.length; i++) {
     const anime = ongoingAnime[i];
+    let found = false;
     
-    const broadcastData = await fetchJikanBroadcast(anime.mal_id);
-    
-    if (broadcastData && broadcastData.broadcastDay) {
-      const day = broadcastData.broadcastDay.replace(/s$/i, '');
-      anime.broadcastDay = day;
-      anime.broadcastTime = broadcastData.broadcastTime;
-      enriched++;
+    // Try LiveChart first (by MAL ID or AniList ID)
+    if (liveChartData) {
+      let schedule = null;
+      if (anime.mal_id && liveChartData.scheduleByMalId.has(anime.mal_id)) {
+        schedule = liveChartData.scheduleByMalId.get(anime.mal_id);
+      } else if (anime.anilist_id && liveChartData.scheduleByAnilistId.has(anime.anilist_id)) {
+        schedule = liveChartData.scheduleByAnilistId.get(anime.anilist_id);
+      }
+      
+      if (schedule && schedule.day) {
+        anime.broadcastDay = schedule.day;
+        anime.broadcastTime = schedule.time;
+        enriched++;
+        fromLiveChart++;
+        found = true;
+      }
     }
     
-    process.stdout.write(`\r   ${progressBar(i + 1, ongoingAnime.length)} - Found schedules: ${enriched}`);
+    // Fallback to Jikan for remaining anime
+    if (!found && anime.mal_id) {
+      const broadcastData = await fetchJikanBroadcast(anime.mal_id);
+      
+      if (broadcastData && broadcastData.broadcastDay) {
+        const day = broadcastData.broadcastDay.replace(/s$/i, '');
+        anime.broadcastDay = day;
+        anime.broadcastTime = broadcastData.broadcastTime;
+        enriched++;
+        fromJikan++;
+      }
+      
+      await sleep(JIKAN_RATE_LIMIT_MS);
+    }
     
-    await sleep(JIKAN_RATE_LIMIT_MS);
+    process.stdout.write(`\r   ${progressBar(i + 1, ongoingAnime.length)} - LiveChart: ${fromLiveChart}, Jikan: ${fromJikan}`);
   }
   
-  console.log(`\n\n   ✅ Jikan broadcast enrichment complete: ${enriched}/${ongoingAnime.length}\n`);
+  console.log(`\n\n   ✅ Broadcast enrichment complete: ${enriched}/${ongoingAnime.length}`);
+  console.log(`      From LiveChart: ${fromLiveChart} | From Jikan: ${fromJikan}\n`);
   
-  return { total: ongoingAnime.length, enriched };
+  return { total: ongoingAnime.length, enriched, fromLiveChart, fromJikan };
 }
 
 // ============================================================

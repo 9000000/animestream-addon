@@ -1,0 +1,276 @@
+{
+  "version": "1.0.0",
+  "description": "Torrent naming pattern database for AnimeStream",
+  "lastUpdated": "2026-01-22",
+  
+  "contentTypes": {
+    "episode": {
+      "description": "Single episode releases",
+      "patterns": [
+        {
+          "name": "SxxExx",
+          "regex": "\\bS0?(\\d{1,2})\\s*E0?(\\d{1,4})(?:v\\d+)?(?!\\d)",
+          "example": "[SubsPlease] My Hero Academia - S01E05 (1080p).mkv",
+          "groups": ["season", "episode"]
+        },
+        {
+          "name": "Sx-xx",
+          "regex": "\\bS0?(\\d{1,2})\\s*-\\s*0?(\\d{1,4})(?:v\\d+)?(?!\\d)",
+          "example": "[Judas] Boku no Hero Academia S1 - 04.mkv",
+          "groups": ["season", "episode"]
+        },
+        {
+          "name": "XxYY",
+          "regex": "\\b(\\d{1,2})x(\\d{1,4})(?:v\\d+)?(?!\\d)",
+          "example": "Demon Slayer 1x05.mkv",
+          "groups": ["season", "episode"]
+        },
+        {
+          "name": "Season X Episode Y",
+          "regex": "\\bSeason\\s*0?(\\d{1,2})\\s*(?:[-:]?\\s*)?(?:Episode|Ep\\.?)\\s*0?(\\d{1,4})(?:v\\d+)?(?!\\d)",
+          "example": "Attack on Titan Season 4 Episode 10",
+          "groups": ["season", "episode"]
+        },
+        {
+          "name": "Season X - Y",
+          "regex": "\\bSeason\\s*0?(\\d{1,2})\\s*-\\s*0?(\\d{1,3})(?:v\\d+)?(?!\\d)",
+          "example": "Jujutsu Kaisen Season 2 - 15",
+          "groups": ["season", "episode"]
+        },
+        {
+          "name": "Absolute - XX",
+          "regex": "\\s-\\s0?(\\d{1,4})(?:v\\d+)?(?:\\s|\\(|\\[|$)",
+          "example": "[SubsPlease] Frieren - 05 (1080p).mkv",
+          "groups": ["episode"],
+          "isAbsolute": true
+        },
+        {
+          "name": "Episode/Ep XX",
+          "regex": "\\b(?:Episode|Ep\\.?)\\s*0?(\\d{1,4})(?:v\\d+)?(?!\\d)",
+          "example": "[Fansub] Anime Episode 12.mkv",
+          "groups": ["episode"],
+          "isAbsolute": true
+        },
+        {
+          "name": "Japanese #XX/第XX話",
+          "regex": "(?:#|第)0?(\\d{1,4})(?:話|回|v\\d+)?",
+          "example": "アニメ 第12話.mkv",
+          "groups": ["episode"],
+          "isAbsolute": true
+        },
+        {
+          "name": "Bracketed [XX]",
+          "regex": "[\\[\\(]0?(\\d{1,3})(?:v\\d+)?[\\]\\)](?!\\s*(?:p|P)\\b)",
+          "example": "[Fansub] Anime [12].mkv",
+          "groups": ["episode"],
+          "isAbsolute": true,
+          "excludeValues": [720, 1080, 480, 360, 2160]
+        },
+        {
+          "name": "Xth Season - YY",
+          "regex": "\\b(\\d{1,2})(?:st|nd|rd|th)\\s*Season\\s*-\\s*0?(\\d{1,3})",
+          "example": "Jujutsu Kaisen 2nd Season - 15",
+          "groups": ["season", "episode"]
+        }
+      ]
+    },
+    
+    "batch": {
+      "description": "Season packs and batch releases",
+      "patterns": [
+        {
+          "name": "Multi-season S1-S7",
+          "regex": "\\bS0?(\\d{1,2})\\s*[-~]\\s*S0?(\\d{1,2})",
+          "example": "[Sokudo] Boku no Hero Academia [S1-S7]",
+          "isMultiSeason": true
+        },
+        {
+          "name": "Multi-season S1+S2+S3",
+          "regex": "\\bS0?(\\d{1,2})\\s*\\+\\s*S0?(\\d{1,2})",
+          "example": "My Hero Academia S1+S2+S3+S4 Dual Audio",
+          "isMultiSeason": true
+        },
+        {
+          "name": "Season range 1-5",
+          "regex": "\\bSeasons?\\s*(\\d{1,2})\\s*[-~]\\s*(\\d{1,2})",
+          "example": "Demon Slayer Season 1-5 [1080p]",
+          "isMultiSeason": true
+        },
+        {
+          "name": "Season X Part Y",
+          "regex": "\\bSeason\\s*0?(\\d{1,2})\\s*Part\\s*0?(\\d{1,2})\\b",
+          "example": "[EMBER] Demon Slayer (2021) (Season 2 Part 01) [BDRip]",
+          "groups": ["season"]
+        },
+        {
+          "name": "Episode range [01-12]",
+          "regex": "[\\[\\(](\\d{1,3})\\s*[-~]\\s*(\\d{1,3})(?:\\s*(?:Fin|End))?[\\]\\)]",
+          "example": "[Fansub] Anime [01-12] Complete",
+          "groups": ["startEp", "endEp"]
+        },
+        {
+          "name": "Episode range - 01-100",
+          "regex": "\\s-\\s0?(\\d{1,3})\\s*[-~]\\s*0?(\\d{1,3})(?:\\s|\\[|\\(|$)",
+          "example": "[HorribleSubs] One Piece - 01-100 [1080p]",
+          "groups": ["startEp", "endEp"]
+        },
+        {
+          "name": "BD Season Pack",
+          "regex": "\\b(?:Season|S)\\s*0?(\\d{1,2})\\b.*?\\b(?:BD|BDRip|Blu-?ray)\\s*(?:\\d{3,4}p)?\\s*[\\]\\)]",
+          "example": "[Judas] Boku no Hero Academia (Season 1) [BD 1080p][Dual-Audio]",
+          "groups": ["season"],
+          "requiresNoEpisode": true
+        },
+        {
+          "name": "Batch keywords",
+          "regex": "\\b(?:Complete|Batch|全话|全集|Season\\s*Pack|Full\\s*Season|BD\\s*Box|Boxset)\\b",
+          "example": "[Fansub] Anime Complete Series"
+        },
+        {
+          "name": "Range with Fin/End",
+          "regex": "\\b(\\d{1,3})\\s*[-~]\\s*(\\d{1,3})\\s*(?:END|Complete|Batch|Fin)\\b",
+          "example": "[Erai-raws] Kimetsu no Yaiba - 01-26 Fin",
+          "groups": ["startEp", "endEp"]
+        }
+      ]
+    },
+    
+    "movie": {
+      "description": "Theatrical releases and films",
+      "patterns": [
+        {
+          "name": "Movie keyword",
+          "regex": "\\b(?:Movie|Film|Gekijouban|劇場版|Gekijō-ban)\\b",
+          "example": "Demon Slayer: Kimetsu no Yaiba The Movie: Mugen Train"
+        },
+        {
+          "name": "Movie number",
+          "regex": "\\bMovie\\s*0?(\\d{1,2})\\b",
+          "example": "My Hero Academia Movie 04 You're Next",
+          "groups": ["movieNumber"]
+        },
+        {
+          "name": "Year in title (standalone)",
+          "regex": "\\b(20[0-9]{2})\\b(?!\\s*\\[|\\s*\\(|p\\b)",
+          "example": "Demon Slayer Infinity Castle 2025",
+          "groups": ["year"],
+          "requiresNoEpisode": true
+        },
+        {
+          "name": "Theatrical release markers",
+          "regex": "\\b(?:CAM|HDCAM|TS|TELESYNC|TC|TELECINE|DVDSCR|SCREENER|R5|BDRip|BluRay|WEB-DL|WEBDL|WEBRip)\\b.*\\b(20[0-9]{2})\\b",
+          "example": "Demon Slayer Infinity Castle 2025 1080p WEB-DL",
+          "groups": ["year"]
+        },
+        {
+          "name": "Movie arc names",
+          "regex": "\\b(?:Mugen\\s*Train|Infinity\\s*Castle|World\\s*Heroes|Two\\s*Heroes|Heroes\\s*Rising|You'?re\\s*Next)\\b",
+          "example": "Demon Slayer: Kimetsu no Yaiba - Infinity Castle"
+        }
+      ]
+    },
+    
+    "special": {
+      "description": "OVAs, ONAs, Specials, Extras",
+      "patterns": [
+        {
+          "name": "OVA/ONA/Special",
+          "regex": "\\b(?:OVA|ONA|OAV|Special|SP)\\s*0?(\\d{1,2})?\\b",
+          "example": "My Hero Academia OVA 1",
+          "groups": ["specialNumber"]
+        },
+        {
+          "name": "Season 0 (Specials)",
+          "regex": "\\bS00E0?(\\d{1,2})\\b",
+          "example": "[EMBER] My Hero Academia S00E08 (ONA - 02)",
+          "groups": ["specialNumber"]
+        },
+        {
+          "name": "Extra/Bonus",
+          "regex": "\\b(?:Extra|Bonus|Omake|Picture\\s*Drama|Audio\\s*Drama)\\b",
+          "example": "Demon Slayer Extras BD"
+        },
+        {
+          "name": "NCOP/NCED",
+          "regex": "\\b(?:NCOP|NCED|OP|ED)\\s*0?(\\d{1,2})?\\b",
+          "example": "Demon Slayer NCOP1",
+          "groups": ["creditNumber"]
+        },
+        {
+          "name": "Preview/Trailer/PV",
+          "regex": "\\b(?:Preview|Trailer|PV|CM|Teaser)\\b",
+          "example": "Demon Slayer Infinity Castle Trailer"
+        }
+      ]
+    }
+  },
+  
+  "seasonIndicators": {
+    "description": "Patterns that indicate which season content belongs to",
+    "patterns": [
+      {
+        "name": "Season X",
+        "regex": "\\bSeason\\s*0?(\\d{1,2})\\b",
+        "example": "Season 4"
+      },
+      {
+        "name": "SX",
+        "regex": "\\bS0?(\\d{1,2})(?![Ee]\\d)",
+        "example": "S4"
+      },
+      {
+        "name": "Xth Season",
+        "regex": "\\b(\\d{1,2})(?:st|nd|rd|th)\\s*Season\\b",
+        "example": "4th Season"
+      },
+      {
+        "name": "Part X",
+        "regex": "\\bPart\\s*0?(\\d{1,2})\\b",
+        "example": "Part 2"
+      },
+      {
+        "name": "Cour X",
+        "regex": "\\bCour\\s*0?(\\d{1,2})\\b",
+        "example": "Cour 2"
+      },
+      {
+        "name": "Roman numerals",
+        "regex": "\\s(I{1,3}|IV|VI{0,3}|IX|X)(?:\\s|$|\\]|\\))",
+        "example": "Part II"
+      }
+    ]
+  },
+  
+  "qualityIndicators": {
+    "resolution": ["2160p", "4K", "UHD", "1080p", "FHD", "720p", "HD", "480p", "SD", "360p"],
+    "source": ["BDRip", "BluRay", "Blu-ray", "BD", "BDMV", "WEB-DL", "WEBDL", "WEBRip", "WEB", "HDTV", "DVDRip", "DVD", "CAM", "TS"],
+    "codec": ["x265", "HEVC", "H.265", "x264", "AVC", "H.264", "AV1", "VP9", "MPEG4"],
+    "audio": ["FLAC", "DTS", "DTS-HD", "TrueHD", "AAC", "AC3", "EAC3", "Opus", "MP3", "Dual Audio", "Multi Audio"]
+  },
+  
+  "releaseGroups": {
+    "trusted": ["SubsPlease", "Erai-raws", "HorribleSubs", "Judas", "EMBER", "Anime Time", "Yameii", "ASW", "GJM"],
+    "description": "Well-known fansub/release groups"
+  },
+  
+  "excludePatterns": {
+    "description": "Patterns that should be excluded from episode matching",
+    "patterns": [
+      {
+        "name": "Resolution numbers",
+        "values": [360, 480, 720, 1080, 2160, 4320],
+        "reason": "These are resolution values, not episode numbers"
+      },
+      {
+        "name": "Year in brackets",
+        "regex": "[\\[\\(](19|20)\\d{2}[\\]\\)]",
+        "reason": "Year indicators, not episode numbers"
+      },
+      {
+        "name": "CRC hash",
+        "regex": "[\\[\\(][0-9A-Fa-f]{8}[\\]\\)]",
+        "reason": "CRC32 checksums"
+      }
+    ]
+  }
+}

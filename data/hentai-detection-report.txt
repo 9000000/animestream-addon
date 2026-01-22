@@ -1,0 +1,99 @@
+Hentai Detection Report
+Generated: 2026-01-22T13:02:53.625Z
+============================================================
+
+AnimeStream catalog: 7422 entries
+HentaiStream catalog: 4257 entries
+Suspicious entries found: 11
+
+────────────────────────────────────────
+Name: Nozoki Ana
+IMDB: tt3140358
+Genres: Comedy, Ecchi, Drama, Animation
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "Nozoki Ana"
+
+────────────────────────────────────────
+Name: Kagaku na Yatsura
+IMDB: tt8819706
+Genres: Comedy, Ecchi, Romance, School, Sci-Fi
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "Kagaku na Yatsura"
+
+────────────────────────────────────────
+Name: 1+2=Paradise
+IMDB: tt0331810
+Genres: Comedy, Ecchi, Harem, Romance, Animation
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "1+2=paradise"
+
+────────────────────────────────────────
+Name: My My Mai
+IMDB: tt0295622
+Genres: Comedy, Ecchi, Supernatural, Animation
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "My My Mai"
+
+────────────────────────────────────────
+Name: Magical Kanan
+IMDB: tt3396174
+Genres: Drama, Fantasy, Magic, Supernatural, Animation, Sci-Fi & Fantasy, Action & Adventure
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "Magical Kanan"
+
+────────────────────────────────────────
+Name: Seikimatsu★Darling
+IMDB: tt6096690
+Genres: Comedy, Drama, Romance, Shounen Ai
+Studio: N/A
+Reasons: SIMILAR_MATCH
+  → Matched: "Seikimatsu Darling"
+  → Similarity: 94.4%
+
+────────────────────────────────────────
+Name: Kakyusei
+IMDB: tt2263353
+Genres: Comedy, Drama, Romance, School, Harem, Animation
+Studio: N/A
+Reasons: SIMILAR_MATCH
+  → Matched: "Kakyuusei"
+  → Similarity: 88.9%
+
+────────────────────────────────────────
+Name: Akahori's Heretical Hour Love Game
+IMDB: tt14642362
+Genres: Comedy, Magic, Parody, Drama, Animation
+Studio: N/A
+Reasons: NSFW_KEYWORDS
+  → NSFW Keywords: r18
+
+────────────────────────────────────────
+Name: Body Jack: Tanoshii Yutai Ridatsu
+IMDB: tt3215348
+Genres: Ecchi, Yuri, Comedy
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "Body Jack: Tanoshii Yutai Ridatsu"
+
+────────────────────────────────────────
+Name: Pia Carrot e Youkoso!! 2 DX
+IMDB: tt0251936
+Genres: Comedy, Romance, Animation
+Studio: N/A
+Reasons: SIMILAR_MATCH
+  → Matched: "Pia Carrot E Youkoso!! 2"
+  → Similarity: 88.0%
+
+────────────────────────────────────────
+Name: Bouken Shite mo Ii Koro
+IMDB: tt13087006
+Genres: Comedy, Animation
+Studio: N/A
+Reasons: EXACT_MATCH
+  → Matched: "Bouken Shite mo Ii Koro"
+

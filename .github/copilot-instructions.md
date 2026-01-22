@@ -2,6 +2,15 @@
 
 **IMPORTANT**: Do NOT commit or push changes to `.github/copilot-instructions.md` to the repository. This file is for local AI guidance only.
 
+## ⚠️ CRITICAL: Development Server Rules
+
+**DO NOT START THE WRANGLER SERVER YOURSELF!**
+- The server is ALWAYS running in the background terminal
+- Logs are output to `cloudflare-worker/logs1.txt`
+- If you need to test changes, ASK THE USER to restart the server
+- Only read `logs1.txt` to check server output
+- Starting the server wastes tokens and interrupts the user's workflow
+
 ## Architecture Overview
 
 AnimeStream is a **Stremio addon** for anime content that uses a **pre-bundled database** of anime from Kitsu/IMDB with **integrated streaming via AllAnime**. It provides custom catalogs with instant loading and direct video streams.
