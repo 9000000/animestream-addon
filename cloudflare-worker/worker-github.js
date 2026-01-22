@@ -2844,6 +2844,83 @@ const POSTER_OVERRIDES = {
   // tt35348212, tt37578217, tt37894464, tt37836273, tt39254742, tt36294552, tt38268282, tt37532731
 };
 
+// MAL Season-to-Parent mapping: Maps sequel/season MAL IDs to their parent series
+// This allows MAL lists with "Frieren Season 2" to show "Frieren" from our catalog
+// Format: { seasonMalId: parentMalId }
+const MAL_SEASON_TO_PARENT = {
+  // Fire Force (Enen no Shouboutai) - Parent: 38671
+  40956: 38671,   // Season 2
+  51818: 38671,   // Season 3
+  59229: 38671,   // Season 3 Part 2
+  
+  // Frieren (Sousou no Frieren) - Parent: 52991
+  59978: 52991,   // Season 2
+  
+  // Oshi no Ko - Parent: 52034
+  55791: 52034,   // Season 2
+  60058: 52034,   // Season 3
+  
+  // Jigokuraku (Hell's Paradise) - Parent: 46569
+  55825: 46569,   // Season 2
+  
+  // Vigilante: My Hero Academia - Parent: 60593
+  61942: 60593,   // Season 2
+  
+  // Fairy Tail - Parent: 6702
+  35972: 6702,    // Final Series
+  48040: 6702,    // Final Series 2
+  
+  // Jujutsu Kaisen - Parent: 40748 (using IMDB-mapped entry)
+  48561: 40748,   // Season 2 (or same series different entry)
+  51009: 40748,   // Season 2 Part 2
+  
+  // Banished from Hero's Party - Parent: 44037
+  55719: 44037,   // Season 2
+  
+  // Dan Da Dan - Parent: 57334
+  60807: 57334,   // Season 2
+  
+  // My Hero Academia - Parent: 31964
+  33486: 31964,   // Season 2
+  36456: 31964,   // Season 3
+  38408: 31964,   // Season 4
+  48418: 31964,   // Season 5
+  52168: 31964,   // Season 6
+  58951: 31964,   // Season 7
+  
+  // One Punch Man - Parent: 30276
+  34134: 30276,   // Season 2
+  52026: 30276,   // Season 3
+  
+  // Demon Slayer - Parent: 38000
+  47778: 38000,   // Mugen Train Arc
+  51019: 38000,   // Entertainment District Arc
+  57884: 38000,   // Swordsmith Village Arc
+  57885: 38000,   // Hashira Training Arc
+  59532: 38000,   // Infinity Castle Arc
+  
+  // Mushoku Tensei - Parent: 39535
+  45576: 39535,   // Part 2
+  51179: 39535,   // Season 2
+  55888: 39535,   // Season 2 Part 2
+  62574: 39535,   // Season 3
+  
+  // Re:Zero - Parent: 31240
+  39587: 31240,   // Season 2
+  42203: 31240,   // Season 2 Part 2
+  54857: 31240,   // Season 3
+  59355: 31240,   // Season 3 Part 2
+  
+  // Attack on Titan - Parent: 16498
+  25777: 16498,   // Season 2
+  35760: 16498,   // Season 3
+  38524: 16498,   // Season 3 Part 2
+  40748: 16498,   // Final Season
+  48583: 16498,   // Final Season Part 2
+  51535: 16498,   // Final Season Part 3
+  54797: 16498,   // Final Season THE FINAL CHAPTERS
+};
+
 // Manual metadata overrides for anime with incomplete catalog data
 // V5 cleanup: Removed items NOT IN CATALOG, kept items that still need enhancements
 // Items with fribb_kitsu/imdb_v5_high matches may still need background/cast overrides
@@ -3527,13 +3604,6 @@ async function handleAniListCatalog(listName, config, catalogData) {
                 id
                 idMal
                 title { romaji english native }
-                format
-                coverImage { large medium }
-                description(asHtml: false)
-                genres
-                seasonYear
-                startDate { year }
-                averageScore
               }
             }
           }
@@ -3589,33 +3659,32 @@ async function handleAniListCatalog(listName, config, catalogData) {
         (malId && (a.mal_id == malId || a.id === 'mal-' + malId))
       );
       
+      // If no direct match and we have MAL ID, try season-to-parent mapping
+      if (!match && malId) {
+        const parentMalId = MAL_SEASON_TO_PARENT[malId];
+        if (parentMalId) {
+          match = catalogData.find(a => a.mal_id == parentMalId);
+          if (match) {
+            console.log('[AniList Catalog] Mapped season MAL:' + malId + ' (' + title + ') to parent ' + parentMalId + ' (' + match.name + ')');
+          }
+        }
+      }
+      
       if (match) {
-        results.push(match);
+        // Avoid duplicates if multiple seasons map to same parent
+        if (!results.some(r => r.id === match.id)) {
+          results.push(match);
+        }
       } else {
-        // Create a fallback entry from AniList data for anime not in catalog
-        const fallbackEntry = {
-          id: malId ? 'mal-' + malId : 'al-' + anilistId,
-          anilist_id: anilistId,
-          mal_id: malId,
-          type: media.format === 'MOVIE' ? 'movie' : 'series',
-          name: title,
-          poster: media.coverImage?.large || media.coverImage?.medium || '',
-          description: media.description ? media.description.replace(/<[^>]*>/g, '').substring(0, 500) : '',
-          genres: media.genres || [],
-          year: media.seasonYear || media.startDate?.year || null,
-          rating: media.averageScore ? media.averageScore / 10 : null,
-          _fromAniListFallback: true
-        };
-        results.push(fallbackEntry);
         unmatchedEntries.push({ anilistId, malId, title });
       }
     }
     
-    const catalogMatched = results.filter(r => !r._fromAniListFallback).length;
-    const fallbackCount = unmatchedEntries.length;
-    console.log('[AniList Catalog] Matched ' + catalogMatched + '/' + entries.length + ' to catalog, ' + fallbackCount + ' using AniList fallback');
+    console.log('[AniList Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
     if (unmatchedEntries.length > 0 && unmatchedEntries.length <= 10) {
-      console.log('[AniList Catalog] Fallback entries:', unmatchedEntries.map(u => `${u.title} (AL:${u.anilistId})`).join(', '));
+      console.log('[AniList Catalog] Unmatched:', unmatchedEntries.map(u => `${u.title} (AL:${u.anilistId}, MAL:${u.malId})`).join(', '));
+    } else if (unmatchedEntries.length > 10) {
+      console.log('[AniList Catalog] ' + unmatchedEntries.length + ' unmatched anime (not in catalog)');
     }
     return results;
     
@@ -3690,33 +3759,32 @@ async function handleMalCatalog(listName, config, catalogData) {
         a.id === 'mal-' + malIdStr
       );
       
+      // If no direct match, try to find parent series via season mapping
+      if (!match) {
+        const parentMalId = MAL_SEASON_TO_PARENT[malId];
+        if (parentMalId) {
+          match = catalogData.find(a => a.mal_id == parentMalId);
+          if (match) {
+            console.log('[MAL Catalog] Mapped season ' + malId + ' (' + (node.title || 'Unknown') + ') to parent ' + parentMalId + ' (' + match.name + ')');
+          }
+        }
+      }
+      
       if (match) {
-        results.push(match);
+        // Avoid duplicates if multiple seasons map to same parent
+        if (!results.some(r => r.id === match.id)) {
+          results.push(match);
+        }
       } else {
-        // Create a fallback entry from MAL data for anime not in catalog
-        // This handles newer seasons that don't have IMDB IDs yet
-        const fallbackEntry = {
-          id: 'mal-' + malId,
-          mal_id: malId,
-          type: 'series',
-          name: node.title || 'Unknown',
-          poster: node.main_picture?.large || node.main_picture?.medium || '',
-          description: '',
-          genres: [],
-          year: null,
-          rating: null,
-          _fromMalFallback: true
-        };
-        results.push(fallbackEntry);
         unmatchedEntries.push({ malId, title: node.title || 'Unknown' });
       }
     }
     
-    const catalogMatched = results.filter(r => !r._fromMalFallback).length;
-    const fallbackCount = unmatchedEntries.length;
-    console.log('[MAL Catalog] Matched ' + catalogMatched + '/' + entries.length + ' to catalog, ' + fallbackCount + ' using MAL fallback');
+    console.log('[MAL Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
     if (unmatchedEntries.length > 0 && unmatchedEntries.length <= 10) {
-      console.log('[MAL Catalog] Fallback entries:', unmatchedEntries.map(u => `${u.title} (MAL:${u.malId})`).join(', '));
+      console.log('[MAL Catalog] Unmatched:', unmatchedEntries.map(u => `${u.title} (MAL:${u.malId})`).join(', '));
+    } else if (unmatchedEntries.length > 10) {
+      console.log('[MAL Catalog] ' + unmatchedEntries.length + ' unmatched anime (not in catalog)');
     }
     return results;
     
