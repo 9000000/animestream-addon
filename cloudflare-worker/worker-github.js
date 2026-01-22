@@ -1658,7 +1658,8 @@ const CONFIGURE_HTML = `<!doctype html>
       }
       // SubDL API key
       if (state.subdlApiKey) parts.push('sk=' + encodeURIComponent(state.subdlApiKey));
-      return parts.join('&');
+      // Use | as separator (Stremio standard) instead of & (URL query string style)
+      return parts.join('|');
     }
     
     // Copy manifest URL to clipboard
@@ -3566,9 +3567,11 @@ async function handleAniListCatalog(listName, config, catalogData) {
     
     // Match to catalog by AniList ID or MAL ID (catalog uses anilist_id and mal_id fields)
     const results = [];
+    const unmatched = [];
     for (const entry of entries) {
       const anilistId = entry.media?.id;
       const malId = entry.media?.idMal;
+      const title = entry.media?.title?.english || entry.media?.title?.romaji || 'Unknown';
       
       // Try to find in catalog - catalog uses anilist_id and mal_id (with underscores)
       let match = catalogData.find(a => 
@@ -3580,10 +3583,17 @@ async function handleAniListCatalog(listName, config, catalogData) {
       
       if (match) {
         results.push(match);
+      } else {
+        unmatched.push({ anilistId, malId, title });
       }
     }
     
-    console.log('[AniList Catalog] Matched ' + results.length + ' anime to catalog');
+    console.log('[AniList Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
+    if (unmatched.length > 0 && unmatched.length <= 10) {
+      console.log('[AniList Catalog] Unmatched:', unmatched.map(u => `${u.title} (AL:${u.anilistId})`).join(', '));
+    } else if (unmatched.length > 10) {
+      console.log('[AniList Catalog] ' + unmatched.length + ' unmatched anime (not in catalog)');
+    }
     return results;
     
   } catch (err) {
@@ -3644,9 +3654,11 @@ async function handleMalCatalog(listName, config, catalogData) {
     
     // Match to catalog by MAL ID (catalog uses mal_id field)
     const results = [];
+    const unmatched = [];
     for (const entry of entries) {
       const malId = entry.node?.id;
       const malIdStr = String(malId);
+      const title = entry.node?.title || 'Unknown';
       
       // Try to find in catalog - catalog uses mal_id field (with underscore)
       let match = catalogData.find(a => 
@@ -3657,10 +3669,17 @@ async function handleMalCatalog(listName, config, catalogData) {
       
       if (match) {
         results.push(match);
+      } else {
+        unmatched.push({ malId, title });
       }
     }
     
-    console.log('[MAL Catalog] Matched ' + results.length + ' anime to catalog');
+    console.log('[MAL Catalog] Matched ' + results.length + '/' + entries.length + ' anime to catalog');
+    if (unmatched.length > 0 && unmatched.length <= 10) {
+      console.log('[MAL Catalog] Unmatched:', unmatched.map(u => `${u.title} (MAL:${u.malId})`).join(', '));
+    } else if (unmatched.length > 10) {
+      console.log('[MAL Catalog] ' + unmatched.length + ' unmatched anime (not in catalog)');
+    }
     return results;
     
   } catch (err) {
