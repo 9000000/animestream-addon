@@ -1067,6 +1067,37 @@ const CONFIGURE_HTML = `<!doctype html>
             
             <div id="debridStatus" style="margin-top:8px"></div>
           </div>
+          
+          <!-- Torrent Preferences (only shown when torrents enabled) -->
+          <div id="torrentPrefsSection" style="margin-top:16px;display:none">
+            <div class="section-title" style="font-size:14px;margin-bottom:8px">Torrent Preferences</div>
+            <div class="lang-controls" style="grid-template-columns:1fr auto">
+              <select id="torrentPrefsPicker" class="control" size="1">
+                <option value="">Select preferences to add...</option>
+                <optgroup label="Quality">
+                  <option value="q_4k">4K / 2160p</option>
+                  <option value="q_1080">1080p</option>
+                  <option value="q_720">720p</option>
+                  <option value="q_480">480p or lower</option>
+                </optgroup>
+                <optgroup label="Audio Type">
+                  <option value="a_raw">RAW (Japanese, no subs)</option>
+                  <option value="a_sub">SUB (Japanese with subs)</option>
+                  <option value="a_dub">DUB (English dubbed)</option>
+                  <option value="a_dual">DUAL (Multi-audio)</option>
+                </optgroup>
+                <optgroup label="Torrents per Quality">
+                  <option value="n_1">1 torrent per quality</option>
+                  <option value="n_2">2 torrents per quality</option>
+                  <option value="n_3">3 torrents per quality</option>
+                  <option value="n_5">5 torrents per quality</option>
+                </optgroup>
+              </select>
+              <button class="btn btn-sm btn-outline" id="torrentPrefsClear" type="button">Reset</button>
+            </div>
+            <div class="help">Customize torrent search: qualities to include, audio types, and results limit.</div>
+            <div id="torrentPrefsPills" class="pill-grid"></div>
+          </div>
         </div>
 
         <div>
@@ -1123,6 +1154,8 @@ const CONFIGURE_HTML = `<!doctype html>
       debridProvider: '',
       debridApiKey: '',
       debridValidated: false,
+      // Torrent preferences
+      torrentPrefs: [], // e.g. ['q_1080', 'q_720', 'a_sub', 'n_3']
       // Subtitle settings
       subdlApiKey: '',
       // User lists from connected accounts
@@ -1149,6 +1182,7 @@ const CONFIGURE_HTML = `<!doctype html>
         if (key === 'dp' && value) state.debridProvider = value;
         if (key === 'dk' && value) state.debridApiKey = decodeURIComponent(value);
         if (key === 'sk' && value) state.subdlApiKey = decodeURIComponent(value);
+        if (key === 'tp' && value) state.torrentPrefs = value.split(',');
       });
       persist();
     }
@@ -1184,6 +1218,12 @@ const CONFIGURE_HTML = `<!doctype html>
     const modeHttpsBtn = $('#modeHttps');
     const modeTorrentsBtn = $('#modeTorrents');
     const modeBothBtn = $('#modeBoth');
+    
+    // Torrent preferences elements
+    const torrentPrefsSectionEl = $('#torrentPrefsSection');
+    const torrentPrefsPicker = $('#torrentPrefsPicker');
+    const torrentPrefsClearBtn = $('#torrentPrefsClear');
+    const torrentPrefsPillsEl = $('#torrentPrefsPills');
     
     const CATALOG_NAMES = { top: 'Top Rated', season: 'Season Releases', airing: 'Currently Airing', movies: 'Movies' };
     const anilistListsGroup = $('#anilistListsGroup');
@@ -1321,6 +1361,76 @@ const CONFIGURE_HTML = `<!doctype html>
     renderCatalogPills();
     updateCatalogDropdownWithUserLists();
     
+    // ===== TORRENT PREFERENCES =====
+    const TORRENT_PREF_NAMES = {
+      'q_4k': '4K / 2160p', 'q_1080': '1080p', 'q_720': '720p', 'q_480': '480p or lower',
+      'a_raw': 'RAW', 'a_sub': 'SUB', 'a_dub': 'DUB', 'a_dual': 'DUAL Audio',
+      'n_1': '1 per quality', 'n_2': '2 per quality', 'n_3': '3 per quality', 'n_5': '5 per quality'
+    };
+    
+    function renderTorrentPrefsPills() {
+      if (!torrentPrefsPillsEl) return;
+      torrentPrefsPillsEl.innerHTML = (state.torrentPrefs || []).map(key => 
+        '<div class="pill" data-key="' + key + '"><span class="txt">' + (TORRENT_PREF_NAMES[key] || key) + '</span><span class="handle" title="Remove">✕</span></div>'
+      ).join('');
+      
+      // Update dropdown - hide already selected items
+      if (torrentPrefsPicker) {
+        Array.from(torrentPrefsPicker.options).forEach(opt => {
+          if (opt.value) opt.disabled = (state.torrentPrefs || []).includes(opt.value);
+        });
+        torrentPrefsPicker.value = '';
+      }
+      
+      // Attach remove handlers
+      torrentPrefsPillsEl.querySelectorAll('.handle').forEach(handle => {
+        handle.onclick = () => {
+          const key = handle.parentElement.dataset.key;
+          state.torrentPrefs = (state.torrentPrefs || []).filter(c => c !== key);
+          persist();
+          renderTorrentPrefsPills();
+          rerender();
+        };
+      });
+    }
+    
+    if (torrentPrefsPicker) {
+      torrentPrefsPicker.onchange = () => {
+        const val = torrentPrefsPicker.value;
+        if (!val) return;
+        
+        if (!state.torrentPrefs) state.torrentPrefs = [];
+        if (!state.torrentPrefs.includes(val)) {
+          state.torrentPrefs.push(val);
+          persist();
+          renderTorrentPrefsPills();
+          rerender();
+          setTimeout(() => torrentPrefsPicker.focus(), 10);
+        }
+        torrentPrefsPicker.value = '';
+      };
+    }
+    
+    if (torrentPrefsClearBtn) {
+      torrentPrefsClearBtn.onclick = () => {
+        state.torrentPrefs = [];
+        persist();
+        renderTorrentPrefsPills();
+        rerender();
+      };
+    }
+    
+    // Show/hide torrent prefs based on stream mode
+    function updateTorrentPrefsVisibility() {
+      if (torrentPrefsSectionEl) {
+        const showTorrents = state.streamMode === 'torrents' || state.streamMode === 'both';
+        torrentPrefsSectionEl.style.display = showTorrents ? 'block' : 'none';
+      }
+    }
+    
+    renderTorrentPrefsPills();
+    updateTorrentPrefsVisibility();
+
     showCountsEl.onchange = () => { state.showCounts = showCountsEl.checked; persist(); rerender(); };
     excludeLongRunningEl.onchange = () => { state.excludeLongRunning = excludeLongRunningEl.checked; persist(); rerender(); };
     
@@ -1723,6 +1833,7 @@ const CONFIGURE_HTML = `<!doctype html>
       state.debridValidated = false; // Reset validation when mode changes
       persist();
       updateDebridUI();
+      updateTorrentPrefsVisibility();
       rerender();
     }
     
@@ -1838,6 +1949,8 @@ const CONFIGURE_HTML = `<!doctype html>
       }
       // SubDL API key
       if (state.subdlApiKey) parts.push('sk=' + encodeURIComponent(state.subdlApiKey));
+      // Torrent preferences (only if any are set)
+      if (state.torrentPrefs && state.torrentPrefs.length > 0) parts.push('tp=' + state.torrentPrefs.join(','));
       // Use | as separator (Stremio standard) instead of & (URL query string style)
       return parts.join('|');
     }
@@ -2181,6 +2294,22 @@ const EPISODE_SEASON_MAPPINGS = {
       { season: 1, start: 1, end: 293 }
     ],
     totalSeasons: 1
+  },
+
+  // ===========================================
+  // GOLDEN KAMUY (tt8225204) - 53 episodes total
+  // S1: 12 eps, S2: 12 eps, S3: 12 eps, S4: 13 eps, S5 (Final): 4 eps
+  // Cinemeta splits into 5 seasons
+  // ===========================================
+  'tt8225204': {
+    seasons: [
+      { season: 1, start: 1, end: 12 },      // Season 1
+      { season: 2, start: 13, end: 24 },     // Season 2
+      { season: 3, start: 25, end: 36 },     // Season 3
+      { season: 4, start: 37, end: 49 },     // Season 4
+      { season: 5, start: 50, end: 53 },     // Final Chapter
+    ],
+    totalSeasons: 5
   },
 };
 
@@ -2988,8 +3117,16 @@ const NON_ANIME_BLACKLIST = new Set([
 ]);
 
 // Manual poster overrides for anime with broken/missing metahub posters
+// These are typically new/upcoming anime that Metahub doesn't have yet
 // V5 cleanup: Removed items NOT IN CATALOG or with good Fribb/IMDB matches
 const POSTER_OVERRIDES = {
+  // === NEW/UPCOMING ANIME (Metahub doesn't have posters yet) ===
+  'tt38268282': 'https://media.kitsu.app/anime/49847/poster_image/large-f9a0fe19d2d2647e295046f779bc2e97.jpeg', // Steel Ball Run: JoJo's Bizarre Adventure
+  'tt36294552': 'https://media.kitsu.app/anime/47243/poster_image/large-5f135e0ade6ef5b784e4ddf0342c3330.jpeg', // Trigun Stargaze
+  'tt37532731': 'https://media.kitsu.app/anime/49372/poster_image/large-13c34534bcbb483eff2e4bd8c6124430.jpeg', // You and I are Polar Opposites
+  'tt36592708': 'https://media.kitsu.app/anime/48198/poster_image/large-b8e67c6a35c2a5e94b5c0b82e0f5a3c7.jpeg', // There's No Freaking Way I'll be Your Lover!
+  
+  // === LEGACY POSTER OVERRIDES ===
   'tt38691315': 'https://media.kitsu.app/anime/50202/poster_image/large-b0a51e52146b1d81d8d0924b5a8bbe82.jpeg', // Style of Hiroshi Nohara Lunch - imdb_v5_medium
   'tt12787182': 'https://media.kitsu.app/anime/poster_images/43256/large.jpg', // Fushigi Dagashiya: Zenitendou
   'tt1978960': 'https://media.kitsu.app/anime/poster_images/5007/large.jpg', // Knyacki!
@@ -3002,9 +3139,6 @@ const POSTER_OVERRIDES = {
   'tt37196939': 'https://media.kitsu.app/anime/49966/poster_image/large-420c08752313cc1ad419f79aa4621a8d.jpeg', // Wash it All Away
   'tt39050141': 'https://media.kitsu.app/anime/50371/poster_image/large-e9aaad3342085603c1e3d2667a5954ab.jpeg', // Love Through A Prism
   'tt32482998': 'https://media.kitsu.app/anime/50431/poster_image/large-22e1364623ae07665ab286bdbad6d02c.jpeg', // Duel Masters LOST
-  'tt36592708': 'https://media.kitsu.app/anime/48198/poster_image/large-b8e67c6a35c2a5e94b5c0b82e0f5a3c7.jpeg', // There's No Freaking Way I'll be Your Lover!
-  // Items removed (NOT IN CATALOG after v5):
-  // tt35348212, tt37578217, tt37894464, tt37836273, tt39254742, tt36294552, tt38268282, tt37532731
 };
 
 // MAL Season-to-Parent mapping: Manual fallback for edge cases
@@ -3808,8 +3942,9 @@ async function handleAniListCatalog(listName, config, catalogData) {
     // Collect all entries from matching lists
     const entries = [];
     for (const list of lists) {
-      // For custom lists, match by name; for standard lists, include all
-      if (!status || list.name === listName) {
+      // For standard lists (status query), include all (API already filtered by status)
+      // For custom lists (no status), match by name
+      if (status || list.name === listName) {
         entries.push(...(list.entries || []));
       }
     }
@@ -4324,7 +4459,8 @@ function parseConfig(configStr) {
     enableAllAnime: true,
     preferRaw: false,
     subtitleLanguages: ['en', 'ja'],
-    subdlApiKey: ''
+    subdlApiKey: '',
+    torrentPrefs: [] // e.g. ['q_1080', 'q_720', 'a_sub', 'n_3']
   };
   
   // Early return for empty/null/undefined
@@ -4381,6 +4517,14 @@ function parseConfig(configStr) {
   const skMatch = decodedConfigStr.match(/\bsk=([^&|]+)/i);
   if (skMatch) {
     config.subdlApiKey = decodeURIComponent(skMatch[1]);
+  }
+  
+  // Pre-extract tp= (torrent preferences) - comma-separated values like q_1080,a_sub
+  const tpMatch = decodedConfigStr.match(/\btp=([^&|]+)/i);
+  if (tpMatch) {
+    config.torrentPrefs = tpMatch[1].split(',')
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
   }
   
   // Parse key-value pairs (use original string to preserve case for API keys)
@@ -4476,7 +4620,8 @@ function parseConfig(configStr) {
       enableAllAnime: true,
       preferRaw: false,
       subtitleLanguages: ['en', 'ja'],
-      subdlApiKey: ''
+      subdlApiKey: '',
+      torrentPrefs: []
     };
   }
 }
