@@ -99,7 +99,7 @@
       "Animation (4326)",
       "Comedy (2733)",
       "Action (2009)",
-      "Drama (1612)",
+      "Drama (1613)",
       "Adventure (1575)",
       "Fantasy (1180)",
       "Sci-Fi (1075)",
@@ -107,7 +107,7 @@
       "Romance (899)",
       "Action & Adventure (800)",
       "School (651)",
-      "Slice of Life (578)",
+      "Slice of Life (579)",
       "Supernatural (536)",
       "Mecha (477)",
       "Kids (420)",
@@ -116,7 +116,7 @@
       "Ecchi (377)",
       "Historical (327)",
       "Super Power (246)",
-      "Music (244)",
+      "Music (245)",
       "Sports (226)",
       "Horror (209)",
       "Military (203)",
@@ -132,7 +132,7 @@
       "Police (90)",
       "Friendship (88)",
       "Anime Influenced (74)",
-      "Mahou Shoujo (72)",
+      "Mahou Shoujo (73)",
       "Hentai (69)",
       "Samurai (62)",
       "Vampire (61)",
@@ -567,7 +567,7 @@
     "withCounts": [
       "2026 - Winter (69)",
       "2026 - Fall (10)",
-      "2026 - Summer (84)",
+      "2026 - Summer (86)",
       "2026 - Spring (5)",
       "2025 - Winter (52)",
       "2025 - Fall (70)",
@@ -827,21 +827,21 @@
     ],
     "withCounts": [
       "Monday (14)",
-      "Tuesday (7)",
-      "Wednesday (11)",
-      "Thursday (9)",
-      "Friday (11)",
-      "Saturday (20)",
+      "Tuesday (6)",
+      "Wednesday (10)",
+      "Thursday (7)",
+      "Friday (9)",
+      "Saturday (13)",
       "Sunday (17)"
     ]
   },
   "stats": {
-    "totalAnime": 7688,
-    "totalSeries": 6044,
+    "totalAnime": 7690,
+    "totalSeries": 6046,
     "totalMovies": 1644,
     "genreCount": 93,
     "movieGenreCount": 58,
     "seasonCount": 248,
-    "ongoingCount": 89
+    "ongoingCount": 76
   }
 }
