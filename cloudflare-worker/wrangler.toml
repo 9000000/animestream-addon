@@ -5,17 +5,14 @@ compatibility_date = "2024-01-01"
 
 [vars]
 ENVIRONMENT = "production"
-# Rotating proxy URLs for AllAnime API (comma-separated, on DIFFERENT Cloudflare accounts)
-# Deploy proxy-worker.js on separate accounts and set their URLs here:
-# PROXY_URLS = "https://animestream-proxy-1.other-acct.workers.dev,https://animestream-proxy-2.other-acct.workers.dev"
 
-# KV namespace for storing user scrobbling tokens
+# KV namespace for storing user account tokens (AniList/MAL user-list catalogs)
 [[kv_namespaces]]
 binding = "USER_TOKENS"
 id = "928dc36173b84dd8bee471aecaf69a8d"
 
 # KV namespace for catalog data + API response caching (reduces subrequests to external APIs)
-# Keys: catalog:v{N}, filters:v{N}, mappings:v{N}, aa:streams:*, aa:search:*, aa:details:*, cm:meta:*, hl:ids:*, hl:imdb:*
+# Keys: catalog:v{N}, filters:v{N}, aa:search:*, aa:details:*, cm:meta:*, hl:ids:*, hl:imdb:*
 [[kv_namespaces]]
 binding = "API_CACHE"
 id = "cd4c8644874547f18a077cc646eda3d6"
