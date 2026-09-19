@@ -54,11 +54,12 @@ const KV_TTL = {
   CATALOG: 0,          // No TTL - catalog is versioned via key (catalog:v15), updated manually
   FILTERS: 0,          // Same as catalog - versioned key
   MAPPINGS: 0,         // Same as catalog - versioned key
-  AA_STREAMS: 300,     // 5 minutes - stream sources change frequently
-  AA_SEARCH: 1800,     // 30 minutes - search results are relatively stable
-  AA_DETAILS: 3600,    // 1 hour - show details (episode counts) change occasionally
-  CINEMETA: 3600,      // 1 hour - metadata/episode lists rarely change
-  HAGLUND: 86400,      // 24 hours - ID mappings are very stable
+  AA_STREAMS: 3600,    // 1 hour - sources for a released episode are stable; long TTL cuts KV write churn
+  AA_SEARCH: 21600,    // 6 hours - search results are stable
+  AA_DETAILS: 21600,   // 6 hours - show details (episode counts) change occasionally
+  CINEMETA: 86400,     // 24 hours - metadata/episode lists rarely change
+  HAGLUND: 604800,     // 7 days - ID mappings are effectively static
+  NEGATIVE: 300,       // 5 minutes - sentinel TTL for empty results (avoids masking outages long-term)
 };
 
 // In-memory cache for KV reads to avoid repeated KV lookups within the same worker instance.
@@ -270,7 +271,7 @@ async function getIdMappings(id, source) {
     return haglundIdCache.get(cacheKey);
   }
 
-  // Check KV cache (persists across worker instance recyclings, 24h TTL)
+  // Check KV cache (persists across worker instance recyclings, 7d TTL)
   const kvKey = `hl:ids:${cacheKey}`;
   const kvCached = await kvCacheGet(kvKey);
   if (kvCached) {
@@ -305,7 +306,7 @@ async function getIdMappings(id, source) {
       imdb: data.imdb || null
     };
     
-    // Cache the result (in-memory + KV with 24h TTL)
+    // Cache the result (in-memory + KV with 7d TTL)
     haglundIdCache.set(cacheKey, mappings);
     kvCachePut(kvKey, mappings, KV_TTL.HAGLUND);
     
@@ -330,7 +331,7 @@ async function getIdMappingsFromImdb(imdbId, season = null) {
     return haglundIdCache.get(cacheKey);
   }
 
-  // Check KV cache (persists across worker instance recyclings, 24h TTL)
+  // Check KV cache (persists across worker instance recyclings, 7d TTL)
   const kvKey = `hl:imdb:${cacheKey}`;
   const kvCached = await kvCacheGet(kvKey);
   if (kvCached) {
@@ -374,7 +375,7 @@ async function getIdMappingsFromImdb(imdbId, season = null) {
       imdb: seasonData.imdb || imdbId
     };
     
-    // Cache the result (in-memory + KV with 24h TTL)
+    // Cache the result (in-memory + KV with 7d TTL)
     haglundIdCache.set(cacheKey, mappings);
     kvCachePut(kvKey, mappings, KV_TTL.HAGLUND);
     
@@ -3107,11 +3108,11 @@ async function searchAllAnime(searchQuery, limit = 10) {
       aniListId: show.aniListId ? parseInt(show.aniListId) : null,
     }));
     
-    // Cache the results (in-memory + KV with 30 min TTL)
+    // Cache the results (in-memory + KV with 6h TTL)
+    // Empty results get a short negative-cache entry so repeated misses
+    // don't re-hit the upstream API on every request
     setCachedSearch(cacheKey, results);
-    if (results.length > 0) {
-      kvCachePut(kvKey, results, KV_TTL.AA_SEARCH);
-    }
+    kvCachePut(kvKey, results, results.length > 0 ? KV_TTL.AA_SEARCH : KV_TTL.NEGATIVE);
     return results;
   } catch (e) {
     console.error('AllAnime search error:', e.message);
@@ -3270,11 +3271,10 @@ async function getEpisodeSources(showId, episode) {
     }
   }
 
-  // Cache in KV (5 min TTL - streams change when new sources are added)
-  // Only cache non-empty results to avoid masking temporary API failures
-  if (streams.length > 0) {
-    kvCachePut(kvKey, streams, KV_TTL.AA_STREAMS);
-  }
+  // Cache in KV (1 hour TTL - stream sources for a released episode are stable)
+  // Empty results are negative-cached for 5 min so a missing/failed episode
+  // doesn't trigger an upstream fetch on every request
+  kvCachePut(kvKey, streams, streams.length > 0 ? KV_TTL.AA_STREAMS : KV_TTL.NEGATIVE);
 
   return streams;
 }
@@ -3325,7 +3325,7 @@ async function getAllAnimeShowDetails(showId) {
     const data = await response.json();
     const show = data?.data?.show || null;
     
-    // Cache in KV (1 hour TTL - episode counts update as new episodes air)
+    // Cache in KV (6 hour TTL - episode counts update as new episodes air)
     if (show) {
       kvCachePut(kvKey, show, KV_TTL.AA_DETAILS);
     }
@@ -3382,7 +3382,7 @@ async function fetchCinemetaMeta(imdbId, type = 'series') {
       _isComplete: !!meta.poster && !!meta.description && meta.description.length > 10
     };
     
-    // Cache in KV (1 hour TTL - metadata is very stable)
+    // Cache in KV (24 hour TTL - metadata is very stable)
     kvCachePut(kvKey, result, KV_TTL.CINEMETA);
     return result;
   } catch (e) {
