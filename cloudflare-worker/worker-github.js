@@ -4053,13 +4053,11 @@ async function handleMeta(catalog, type, id) {
   // First check our catalog (supports tt*, mal-*, kitsu:*)
   let anime = findAnimeById(catalog, baseId);
   let cinemeta = null;
-  
-  // If not in catalog and it's an IMDB ID, try Cinemeta
-  if (!anime && baseId.startsWith('tt')) {
-    cinemeta = await fetchCinemetaMeta(baseId, type);
-    anime = cinemeta;
-  }
-  
+
+  // Not in our catalog = not an anime we serve. Return null without touching
+  // KV or external APIs — Stremio sends meta requests for every title a user
+  // browses (mostly non-anime), and enriching those generated ~100 KV
+  // writes/min on the long tail.
   if (!anime) {
     console.log(`No anime found for meta: ${baseId}`);
     return { meta: null };
