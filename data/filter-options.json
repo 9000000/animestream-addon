@@ -826,13 +826,13 @@
       "Sunday"
     ],
     "withCounts": [
-      "Monday (14)",
-      "Tuesday (6)",
-      "Wednesday (10)",
-      "Thursday (7)",
-      "Friday (9)",
-      "Saturday (13)",
-      "Sunday (17)"
+      "Monday (4)",
+      "Tuesday (4)",
+      "Wednesday (4)",
+      "Thursday (4)",
+      "Friday (8)",
+      "Saturday (9)",
+      "Sunday (11)"
     ]
   },
   "stats": {
@@ -842,6 +842,6 @@
     "genreCount": 93,
     "movieGenreCount": 58,
     "seasonCount": 248,
-    "ongoingCount": 76
+    "ongoingCount": 44
   }
 }
